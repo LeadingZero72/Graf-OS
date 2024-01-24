@@ -16,6 +16,7 @@ Features are:
 + High definition audio driver (including audio input)
 + Intel Southbridge Clock Throttling (interactive power manager)
 - no network drivers
+- no graphics hardware drivers
 - no USB drivers
 - no other filesystems supported (like fat32/ntfs etc.)
 
