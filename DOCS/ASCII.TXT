@@ -1,0 +1,254 @@
+;Ascii 'TAB' = 09
+
+;Ascii ''  = 26 = scroll
+;Ascii ''  = 27 = scroll
+;Ascii '' = 28 = nothing
+;Ascii '' = 29 1dh
+
+;Ascii '' = 30 1eh
+;Ascii '' = 31 1fh
+;Ascii ' ' = 32 20h
+;Ascii '!' = 33 21h
+;Ascii '"' = 34 22h
+;Ascii '#' = 35 23h
+;Ascii '$' = 36 24h
+;Ascii '%' = 37 25h
+;Ascii '&' = 38 26h
+;Ascii ''' = 39 27h
+
+;Ascii '(' = 40 28h
+;Ascii ')' = 41 29h
+;Ascii '*' = 42 2ah
+;Ascii '+' = 43 2bh
+;Ascii ',' = 44 2ch
+;Ascii '-' = 45 2dh
+;Ascii '.' = 46 2eh
+;Ascii '/' = 47 2fh
+;Ascii '0' = 48 30h
+;Ascii '1' = 49 31h
+
+;Ascii '2' = 50 32h
+;Ascii '3' = 51 33h
+;Ascii '4' = 52 34h
+;Ascii '5' = 53 35h
+;Ascii '6' = 54 36h
+;Ascii '7' = 55 37h
+;Ascii '8' = 56 38h
+;Ascii '9' = 57 39h
+;Ascii ':' = 58 3ah
+;Ascii ';' = 59 3bh
+
+;Ascii '<' = 60 3ch
+;Ascii '=' = 61 3dh
+;Ascii '>' = 62 3eh
+;Ascii '?' = 63 3fh
+;Ascii '@' = 64 40h
+;Ascii 'A' = 65 41h
+;Ascii 'B' = 66 42h
+;Ascii 'C' = 67 43h
+;Ascii 'D' = 68 44h
+;Ascii 'E' = 69 45h
+
+;Ascii 'F' = 70 46h
+;Ascii 'G' = 71 47h
+;Ascii 'H' = 72 48h
+;Ascii 'I' = 73 49h
+;Ascii 'J' = 74 4ah
+;Ascii 'K' = 75 4bh
+;Ascii 'L' = 76 4ch
+;Ascii 'M' = 77 4dh
+;Ascii 'N' = 78 4eh
+;Ascii 'O' = 79 4fh
+
+;Ascii 'P' = 80 50h 
+;Ascii 'Q' = 81 51h
+;Ascii 'R' = 82 52h
+;Ascii 'S' = 83 53h
+;Ascii 'T' = 84 54h
+;Ascii 'U' = 85 55h
+;Ascii 'V' = 86 56h
+;Ascii 'W' = 87 57h
+;Ascii 'X' = 88 58h
+;Ascii 'Y' = 89 59h
+
+;Ascii 'Z' = 90 5ah
+;Ascii '[' = 91 5bh
+;Ascii '\' = 92 5ch
+;Ascii ']' = 93 5dh
+;Ascii '^' = 94 5eh
+;Ascii '_' = 95 5fh
+;Ascii '`' = 96 60h
+;Ascii 'a' = 97 61h
+;Ascii 'b' = 98 62h
+;Ascii 'c' = 99 63h
+
+;Ascii 'd' = 100 64h
+;Ascii 'e' = 101 65h
+;Ascii 'f' = 102 66h
+;Ascii 'g' = 103 67h
+;Ascii 'h' = 104 68h
+;Ascii 'i' = 105 69h
+;Ascii 'j' = 106 6ah
+;Ascii 'k' = 107 6bh
+;Ascii 'l' = 108 6ch
+;Ascii 'm' = 109 6dh
+
+;Ascii 'n' = 110 6eh
+;Ascii 'o' = 111 6fh
+;Ascii 'p' = 112 70h
+;Ascii 'q' = 113 71h
+;Ascii 'r' = 114 72h
+;Ascii 's' = 115 73h
+;Ascii 't' = 116 74h
+;Ascii 'u' = 117 75h
+;Ascii 'v' = 118 76h
+;Ascii 'w' = 119 77h
+
+;Ascii 'x' = 120 78h
+;Ascii 'y' = 121 79h
+;Ascii 'z' = 122 7ah
+;Ascii '{' = 123 7bh
+;Ascii '|' = 124 7ch
+;Ascii '}' = 125 7dh
+;Ascii '~' = 126 7eh
+;Ascii '' = 127 7fh
+;Ascii 'Ä' = 128 80h
+;Ascii 'Å' = 129 81h
+
+;Ascii 'Ç' = 130 82h
+;Ascii 'É' = 131 83h
+;Ascii 'Ñ' = 132 84h
+;Ascii 'Ö' = 133 85h
+;Ascii 'Ü' = 134 86h
+;Ascii 'á' = 135 87h
+;Ascii 'à' = 136 88h
+;Ascii 'â' = 137 89h
+;Ascii 'ä' = 138 8ah
+;Ascii 'ã' = 139 8bh
+
+;Ascii 'å' = 140 8ch
+;Ascii 'ç' = 141 8dh
+;Ascii 'é' = 142 8eh
+;Ascii 'è' = 143 8fh
+;Ascii 'ê' = 144 90h
+;Ascii 'ë' = 145 91h
+;Ascii 'í' = 146 92h
+;Ascii 'ì' = 147 93h
+;Ascii 'î' = 148 94h
+;Ascii 'ï' = 149 95h
+
+;Ascii 'ñ' = 150 96h
+;Ascii 'ó' = 151 97h
+;Ascii '∂' = 152 98h
+;Ascii 'ô' = 153 99h
+;Ascii 'ö' = 154 9ah
+;Ascii 'õ' = 155 9bh
+;Ascii 'ú' = 156 9ch
+;Ascii 'ù' = 157 9dh
+;Ascii 'û' = 158 9eh
+;Ascii 'ü' = 159 9fh
+
+;Ascii '†' = 160 a0h
+;Ascii '°' = 161 a1h
+;Ascii '¢' = 162 a2h
+;Ascii '£' = 163 a3h
+;Ascii '§' = 164 a4h
+;Ascii '•' = 165 a5h
+;Ascii '¶' = 166 a6h
+;Ascii 'ß' = 167 a7h
+;Ascii '®' = 168 a8h
+;Ascii '©' = 169 a9h
+
+;Ascii '™' = 170 aa
+;Ascii '´' = 171 ab
+;Ascii '¨' = 172 ac
+;Ascii '≠' = 173 ad
+;Ascii 'Æ' = 174 ae
+;Ascii 'Ø' = 175 af
+;Ascii '∞' = 176 b0
+;Ascii '±' = 177 b1
+;Ascii '≤' = 178 b2
+;Ascii '≥' = 179 b3
+
+;Ascii '¥' = 180 b4
+;Ascii 'µ' = 181 b5
+;Ascii '∂' = 182 b6
+;Ascii '∑' = 183 b7
+;Ascii '∏' = 184 b8
+;Ascii 'π' = 185 b9
+;Ascii '∫' = 186 ba
+;Ascii 'ª' = 187 bb
+;Ascii 'º' = 188 bc
+;Ascii 'Ω' = 189 bd
+
+;Ascii 'æ' = 190 be
+;Ascii 'ø' = 191 bf
+;Ascii '¿' = 192 c0
+;Ascii '¡' = 193 c1
+;Ascii '¬' = 194 c2
+;Ascii '√' = 195 c3
+;Ascii 'ƒ' = 196 c4
+;Ascii '≈' = 197 c5
+;Ascii '∆' = 198 c6
+;Ascii '«' = 199 c7
+
+;Ascii '»' = 200 c8
+;Ascii '…' = 201 c9
+;Ascii ' ' = 202 ca
+;Ascii 'À' = 203 cb
+;Ascii 'Ã' = 204 cc
+;Ascii 'Õ' = 205 cd
+;Ascii 'Œ' = 206 ce
+;Ascii 'œ' = 207 cf
+;Ascii '–' = 208 d0
+;Ascii '—' = 209 d1
+
+;Ascii '“' = 210 d2
+;Ascii '”' = 211 d3
+;Ascii '‘' = 212 d4
+;Ascii '’' = 213 d5
+;Ascii '÷' = 214 d6
+;Ascii '◊' = 215 d7
+;Ascii 'ÿ' = 216 d8
+;Ascii 'Ÿ' = 217 d9
+;Ascii '⁄' = 218 da
+;Ascii '€' = 219 db   
+
+;Ascii '‹' = 220 dc      
+;Ascii '›' = 221 dd
+;Ascii 'ﬁ' = 222 de
+;Ascii 'ﬂ' = 223 df  
+;Ascii '‡' = 224 e0
+;Ascii '·' = 225 e1  
+;Ascii '‚' = 226 e2
+;Ascii '„' = 227 e3
+;Ascii '‰' = 228 e4  
+;Ascii 'Â' = 229 e5
+
+;Ascii 'Ê' = 230 e6
+;Ascii 'Á' = 231 e7
+;Ascii 'Ë' = 232 e8
+;Ascii 'È' = 233 e9
+;Ascii 'Í' = 234 ea
+;Ascii 'Î' = 235 eb
+;Ascii 'Ï' = 236 ec
+;Ascii 'Ì' = 237 ed
+;Ascii 'Ó' = 238 ee
+;Ascii 'Ô' = 239 ef
+
+;Ascii '' = 240 f0
+;Ascii 'Ò' = 241 f1
+;Ascii 'Ú' = 242 f2
+;Ascii 'Û' = 243 f3
+;Ascii 'Ù' = 244 f4
+;Ascii 'ı' = 245 f5
+;Ascii 'ˆ' = 246 f6
+;Ascii '˜' = 247 f7
+;Ascii '¯' = 248 f8
+;Ascii '˘' = 249 f9
+
+;Ascii '˙' = 250 fa
+;Ascii '˚' = 251 fb
+;Ascii '¸' = 252 fc
+;Ascii '˝' = 253 fd
+;Ascii '˛' = 254 fe

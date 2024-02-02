@@ -1,0 +1,134 @@
+
+
+
+  FAR-FUNKTIONEN ZUM EXPORT
+
+
+  Es sollte klar sein, da· Far-Funktionen
+  eigentlich nur zum Export gedacht sind,
+  d.h. um Features zwischen Programmen
+  auszutauschen und dynamisch einbindbar
+  zu machen.
+
+  Zur Benutzung solcher Features mÅssen
+  nur 2 Bedingungen erfÅllt werden:
+
+  Die Funktion mu· im System gelistet sein,
+  wenn nicht, mu· die jeweilige DLL geladen
+  werden. Die zweite Bedingung ist eigentlich
+  keine Bedingung, sondern der Programmierer
+  mu· das Funktionsinterface mit in seinen
+  Code schreiben und dann auch benutzen^^
+
+
+  Der Compiler hat wiedermal keine Arbeit und
+  trÑgt auch keine Verantwortung an der Syntax,
+  sondern schmiert den <far>-Ausdruck einfach
+  mit in den Output, so da· der Assembler das
+  lesen und umdenken kann.
+
+
+  Die Far-Calls bestehen auf absoluten seg:ofs
+  und kînnen erst zur Laufzeit geladen werden,
+  was eigentlich gut fÅr den Assembler ist,
+  denn so mu· er sich nicht mehr um das Patchen
+  der Aufrufe (=jumps) im BinÑrcode kÅmmern,
+  was bei relativen NEAR-Jumps und Calls noch
+  der Fall war.
+
+
+  Er mu· jetzt aber hinter den BinÑrcode zusÑtzlich
+  die Funktionsnamen und die Offsets derer Aufrufe
+  mit in die Datei schreiben.
+
+
+  Der Assembler kÅmmert sich nicht um das Patchen der
+  Far-calls, weil der exe/dll-loader das in Realtime
+  Åbernehmen mu·!
+
+  Er listet lediglich alle Far-Funktionen und die
+  Offsets ihrer Aufrufe hinten an die BinÑrdatei.
+
+
+
+  DER EXE/DLL-LOADER
+
+  Die BinÑrdaten werden zuerst geladen, um zu der
+  Segmentadresse zu kommen. Danach kînnen beliebig
+  viele Funktionen und Aufrufe aus dem Dateirest
+  heraus gepatcht und verarbeitet werden.
+
+  Die Funktionsnamen und Einsprungadressen werden
+  verîffentlicht, die Aufrufe, im schon geladenen
+  Speicher, mit dem Segment und dem Funktionsbeginn
+  Åberschrieben.
+
+
+  LOKALE VERSCHIEBUNG
+
+  Lokale Variablen, auch Parameter werden Åber SS:BP
+  angesprochen (auch Pointer, die dann in DS:EDI
+  geladen werden).
+
+  Exportfunktionen sind auf dem Stack grî·er. Da sind
+  CS und IP, statt nur IP. Die Parameter sind jetzt
+  +2 Words verschoben und der Stackframe macht nochmal
+  ein Word, also +3, sind 6 Bytes!
+
+  Die lokalen Variablen dÅrften den Unterschied nicht
+  bemerken, weil sie direkt als nÑchstes auf dem Stack
+  folgen und quasi oben auf der Suppe schwimmen.
+  Ihre Offsets sind daher zwar negativ, aber sonst
+  eigentlich nicht verschiebbar,
+
+  "Der Assembler sortiert die lokalen Variablen dabei,
+   damit sie in Definitionsreihenfolge auftauchen und
+   auch sequenziell abgearbeitet werden kînnen, ungeachtet
+   des negativen Offsets Åber BP, lol"
+
+
+
+  PROGRAMME BIS 640kB
+
+  Wird innerhalb des Programms nur ein Segment verwendet,
+  ist ab 32kB mit der Sicherheit Schlu·, weil die NEAR-
+  SprÅnge vorwÑrts, wie rÅckwÑrts, also +-32kB springen
+  kînnen und danach ist Schlu·.
+
+  Soll ein Programm 640kB gro· sein, kann main() die
+  ersten Funktionen schon nicht mehr aufrufen, es
+  sei denn, es werden far-Calls verwendet :-)
+
+
+
+
+  SYNTAX
+
+  Ob eine Funktion nun exportiert oder importiert wird,
+  ist dem Assembler relativ gleichgÅltig. Der Compiler
+  hat eh keine Arbeit damit...
+
+  Beide Funktionen werden FAR behandelt, d.h. es wird
+  ein Name registriert und darunter alle Aufrufoffsets.
+  Beide kînnen Parameter haben oder auch nicht.
+
+  Der Funktionsoffset ist allerdings bei Import immer Null.
+  So wei· der Exe/Dll-Loader, da· er die Funktion aus dem
+  Pool besorgen mu·, d.h. Seg:Ofs sind hier erstmal
+  unbekannt und nur die Aufrufe dieser Funktion haben
+  bestimmte Offsets.
+
+
+  VARIABLEN
+
+  Alle Programme, auch die Bibliotheken besitzen ihren
+  eigenen Heap. Variablen kînnen also nur Åber Funktionen
+  angesprochen werden.
+
+  Beispiel: Kamerawinkel. Die Kamerawinkel werden von der
+  3d-Engine gebraucht, kînnen aber nur mit einer far-Funktion
+  geÑndert werden.
+
+  Hier kommt es evtl. dazu, da· sowohl main(), als auch
+  die Bibo doppelt Variablen benutzen, was aber kein
+  Problem darstellt.

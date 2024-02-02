@@ -1,0 +1,53 @@
+
+  DIE ZERLEGUNG MATHEMATISCHER AUSDRöCKE
+
+  "Die Mathematik ist in Schalen unterteilt, wo die Klammern
+   immer zuerst berechnet und dann die Potenzen, Faktoren,
+   Summanden berechnet werden, woher auch immer..."
+
+  "Die Computerlîsung ist ebenfalls in Schalen geteilt, auch
+   wenn es nicht sofort auffÑllt, weil Ñu·erste Schale erst
+   in der innersten Routine abgerufen wird..."
+
+  Um einen Ausdruck zu parsen, ruft man Summands() und berechnet
+  alle Summanden, die aus allen Faktoren bestehen, welche wiederum
+  aus allen Potenzen bestehen und diese aus allen, mîglicherweise
+  in Klammern, liegenden Atomen. Durch diese verschachtelte
+  Informationsbeschaffung wird jedweder Ausdruck in der richtigen
+  Reihenfolge verarbeitet und kann berechnet oder in Computercode
+  Åbersetzt werden.
+
+  BESONDERHEITEN
+
+  Atom()
+  Atom() fÅhrt selbst keine Berechnungen durch, sondern erledigt
+  immer nur das "Besorgen" eines Wertes, egal ob Konstante,
+  Variable oder Funktion. Da jedwedes Atom auch von einem Vorzeichen
+  begleitet werden kann, wird zuerst geprÅft, ob ein solches Zeichen '+-'
+  direkt vor dem Atom geschrieben steht, nachdem etwaige Leerzeichen
+  Åbersprungen wurden. Ist das Atom selbst in eine Klammer gehÅllt,
+  wird der enthaltene Ausdruck rekursiv mit Summands() geparst und nach
+  der RÅckkehr die schlie·ende Klammer entfernt, um das Ergebnis
+  zurÅckzugeben.
+
+  Factors()
+  Factors() macht nichts anderes, als eine Kettenrechnung von
+  Multiplikationen und Divisionen abzuklappern, solange der
+  folgende Operator noch ein '*' oder '/' ist.
+
+  Summands()
+  Summands() macht eigentlich das gleiche, wie Factors(), nur da·
+  hier nach '+' und '-' Ausschau gehalten wird. Keine SonderfÑlle,
+  wie auch in Factors().
+
+  ALLGEMEINES
+
+  Zu Beginn jeder Routine (bzw. jedes Schleifendurchganges) werden
+  alle Leerzeichen Åbersprungen, bevor nach Werten/Operationen
+  gescannt wird. Da die immer tieferen Aufrufe ebenfalls Leerzeichen
+  Åberspringen, kînnen auch zwischen den Operationen und dem jeweils
+  zweiten, folgenden Paarwert noch Leerzeichen stehen, die automatisch
+  Åbersprungen werden. Das gilt auch zwischendurch. Da zum Laden des
+  nÑchsten Operators in den Schleifen immer zuerst Leerzeichen ¸ber-
+  sprungen werden.
+

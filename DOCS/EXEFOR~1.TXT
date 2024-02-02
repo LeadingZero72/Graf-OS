@@ -1,0 +1,41 @@
+#############################################
+#  Title:    PRGFORMAT.TXT
+#  Date:    10. Januar 2016
+#  Author: Alexander Graf
+#############################################
+
+  DAS FORMAT AUSFÜHRBARER BINÄRCODE-DATEIEN
+
+  [00]          DWORD     'PRG1' Kennung der Datei
+  [04]          DWORD     Anzahl verwendeter Link Libraries X
+  [08]          DWORD     Einsprungadresse des Startlabels
+  [32..n]      STRING      Abwechselnd ein LIB-Pfad
+                                  und ein LIB-Dateiname als String 1..X
+  [n+00]      DWORD     Anzahl verwendeter Prozedurnamen Y (erzeugte und aufgerufene)
+  [n+04..m] STRING     Prozedurnamen 1..Y
+  [m+00]     DWORD     '.386' Kennung für Codesegment
+  [m+04]     DWORD     Anzahl Codesegmente Z
+  [m+08+u] STRING     Z Codesegmente incl. Längenbezeichnung
+
+#############################################
+
+  DER PROGRAMMLOADER
+
+  - Als erstes wird die Kennung geprüft, um keine falschen Dateien zu
+    laden.
+  - Danach wird dafür gesorgt, daß alle benötigten Link-Libraries geladen
+    sind.
+  - Nun wird die Prozedurliste in einen temporären Puffer kopiert
+  - Für alle Codesegmente wird Speicher reserviert und die Segmente
+    ins RAM geladen.
+  - Da nur lokale Sprünge unterstützt werden, sind alle Jump-Befehle
+    bereits richtig gepatcht!
+  - Für alle Prozeduren, für die eine Einsprungadresse vermerkt ist,
+    wird ein neuer Eintrag in der globalen Binärprozedurliste erstellt
+    und mit dem Namen versehen. Hinzu kommt die Einsprungadresse,
+    welche aus Headerdaten+Codesegment kombiniert und in den Code
+    gepatcht wird. Alle eigenen Prozeduren werden mit einem Flag
+    versehen, damit die entsprechenden Einträge wieder gelöscht werden
+    können, sobald das PRG endet.
+
+#############################################

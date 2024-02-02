@@ -1,0 +1,59 @@
+
+  DATENTYPEN
+
+  Alle Datentypen werden zusammen in einem Deskriptor
+  in der Liste <Typedef> gespeichert. Sobald eine Variable
+  erzeugt wird, befindet sie sich in der Liste <Variables>,
+  mit ihrem Namen, dem Datentyp und dem Heapoffset. Alle
+  Variablen bekommen dabei einen Offset anhand ihrer Datenbreite
+  innerhalb einunddesselben Heap-Arrays.
+
+  Strukturen sind eine Ergänzung der Datentypen und finden
+  in der gleichen Liste (Typedef) Platz. Hinzu kommt, daß ihr
+  Deskriptor eine Reihe von Membernamen beinhaltet, jeweils mit
+  Datentyp und Strukturoffset. Da eine Struktur auch nur ein Datentyp
+  bestimmter Datenbreite ist, können Member einer Struktur auch vom
+  Typ 'Struktur' sein. Durch die gespeicherte Datenbreite wird der
+  Compiler immer in der Lage sein, die Offsets folgender Member korrekt
+  vorzuberechnen.
+
+  Funktionen sind eine Ergänzung der Variablen und finden
+  in der Variablenliste Platz, mit ihrem Namen, Datentypen
+  und einer Kennung, die sie von den üblichen Variablen
+  unterscheiden. Der Compiler ist nun in der Lage, inline-
+  Funktionsaufrufe von Variablenzugriffen zu unterscheiden
+  und statt eines LOAD(Variable) einen CALL(Variable) zu
+  programmieren. Außerdem kann eine Funktion lediglich Werte
+  zurückliefern, selbst aber kein L-Value sein.
+
+
+  GRUNDSÄTZLICHE DATENTYPEN
+
+  Die grundsätzlichen Datentypen richten sich an den
+  Datentypen der CPU aus und den Compileraddons, wie z.B.
+  Stringoperationen.
+
+  BYTE   1 Byte, CPU-Befehle/Register für diesen
+         Datentypen existieren (AL)
+
+  WORD   2 Bytes, CPU-Befehle/Register für diesen
+         Datentypen existieren (AX)
+
+  DWORD  4 Bytes, CPU-Befehle/Register für diesen
+         Datentypen existieren (EAX)
+
+  FLOAT  4 Bytes, FPU-Befehle/Register existieren (load/store dwords)
+
+  REAL   8 Bytes, FPU-Befehle/Register existieren (load/store qwords)
+
+  MMX    8 Bytes, CPU-Befehle/Register existieren (MM0, load/store MMX)
+
+  SSE   16 Bytes, CPU-Befehle/Register existieren (SS0, load/store SSE)
+
+  REX   16 Bytes, CPU-Befehle/Register existieren (r00, load/store IA64)
+
+  BOOL   1 Byte, Compiler nutzt Bytedatentyp und Vergleich mit Null (test al,al)
+
+  STRING 4+X Byte, Compiler nutzt erweiterte Grammatikregeln um Strings
+         zu kombinieren
+

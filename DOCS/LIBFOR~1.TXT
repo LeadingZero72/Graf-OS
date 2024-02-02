@@ -1,0 +1,24 @@
+#############################################
+#  Title:    LIBFORMAT.TXT
+#  Date:    10. Januar 2016
+#  Author: Alexander Graf
+#############################################
+
+  DAS FORMAT DYNAMISCHER BINƒRCODE-BIBLIOTHEKEN
+
+  Das Format entspricht dem von PRG-Dateien, nur daﬂ hier eine
+  andere Kennung verwendet wird.
+
+  [00]          DWORD     'LIB1' Kennung der Datei
+
+#############################################
+
+  DER LIBRARY-LOADER
+
+  Libraries werden wie Programme geladen, nur daﬂ hinter der
+  Einsprungadresse meistens ein Code zum einfrieren des Programms
+  steht, oder eine Hintergrundt‰tigkeit abl‰uft. Wesentlich ist hier nur,
+  daﬂ das Programm nicht sofort endet, damit die enthaltenen Prozeduren
+  resident bleiben.
+
+#############################################

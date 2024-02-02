@@ -1,0 +1,24 @@
+
+  ASSEMBLY, wie geht's ?
+
+  Der Assembler tut im Grunde das gleiche, wie der Compiler auch.
+  Nachdem alle Variablen/Strukturen geklärt sind, wird er allerdings
+  nur noch einzeilige Argumente in Assemblersprache erwarten und
+  dafür nach bestem Gewissen Code generieren:
+
+  Der Lexer sucht als erstes alle Label weg, wenn vorhanden und
+  registriert ihre Adresse fr Jumps!
+  Dann wird er alle Worte scannen und in einen String konvertieren,
+  darauf bedacht, daá er alle numerischen Ausdrcke puffert und durch
+  ? ersetzt.
+
+    and    eax ,  0xd444   -> "and eax,?" -> Nur 1 Bin„rcode, weil der konstante Wert hinterher gepatcht wird.
+    mov    al ,  [0xc999]  -> "mov al,[?]" -> Nur 1 Bin„rcode, weil der konstante Wert hinterher gepatcht wird.
+    mov    [0xc999],eax    -> "mov [?],eax" -> Nur 1 Bin„rcode, weil der konstante Wert hinterher gepatcht wird.
+    mov    [edi],eax       -> "mov [edi],eax" -> Nur 1 Bin„rcode kein Patch!
+    push   ax              -> "push ax" -> Nur 1 Bin„rcode, kein Patch benötigt
+
+  Dann wird fr diesen String ein Element in der Befehlsliste gesucht
+  und der enthaltene Bin„rstring (zur Sicherheit ohne FText) gepatcht
+  und bernommen.
+

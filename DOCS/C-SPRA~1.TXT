@@ -1,0 +1,40 @@
+
+
+  "C" aus Sicht des Kompilers
+
+  Die Verarbeitung von "C" ist grunds„tzlich rekursiv, d.h. die
+  C-Datei kompiliert sich durch einen Aufruf an die Routine
+  Block(), wobei Block() selbst auch Bl”cke erzeugen kann,
+  jenachdem, was im Quelltext steht.
+
+  Ein Block bietet immer nur die selben paar Random-M”glichkeiten,
+  d.h. Leerzeichen, Tabs, Crlf, Kommentare, if/else/while/do/for/
+  switch/with-Kontrollstrukturen, Funktionsdeklarationen und wenn
+  nicht eines von denen, dann ein einzelner "regul„rer Ausdruck".
+  Die einfachen Sachen verursachen keine Rekursion (in dem Compiler
+  kontext), die Kontrollstrukturen aber schon, falls hier ganze
+  Anweisungsbl”cke angegeben werden; im Falle einer einzeiligen
+  Bearbeitung wird der Ausdruck wie ein "regul„rer Ausdruck"
+  kompiliert.
+
+  Regul„re Ausdrcke erzeugen eine neue Qualit„t der Rekursion,
+  da die Priorit„ten durch eine verschachtelte Routinenaufruf-
+  hierachie automatisch von links nach rechts aufgel”st werden,
+  was allemal ein erstaunlicher Stack-Trick ist, zudem aber noch
+  mit Klammern aus der tiefsten Aufrufebene, die direkte Rekursion
+  mit einem eigenst„ndigen Aufruf an "regul„rer Ausdruck" ausgelöst
+  wird, was wieder die h”chste Ebene darstellt.
+  Die Klammern werden hierbei stets mitgez„hlt und darauf geachtet,
+  daá jeder Aufruf an "regul„rer Ausdruck" mit der gleichen
+  Klammerzahl endet, wie er begonnen wurde (das gleiche gilt
+  brigens auch fr die Block()s, da wird auch jede Klammer
+  mitgez„hlt). So kann der Kompiler bereits viel Sicherheit
+  hinzugarantieren (+=)^^, weil kein Aufruf keines einzigen
+  "regul„ren Ausdrucks" jemals ohne diese Prfung kompiliert ;-)
+
+  Das ist schon das Rezept! Eine Objekthierachie, dient ebenfalls
+  nur dem Compiler^^ und stellt eine weitere „uáere Struktur dar,
+  in die die Variablen und Funktionen baumartig angeordnet sind.
+  Die Zugriffsberechtigung geht dabei immer nur nach "unten" so
+  daá nur auf Kinder zugegriffen wird, sonst nichts...
+

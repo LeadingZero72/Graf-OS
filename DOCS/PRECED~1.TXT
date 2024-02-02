@@ -1,0 +1,37 @@
+
+
+  '++','--'
+
+  Diese Operatoren haben's in sich ! Wieviel
+  unntze Schreibarbeit hat man sich hiermit
+  schon vom Hals geschafft. Statt eines vollen
+  Ausdrucks, wird hier 'inline' dekrementiert
+  oder incrementiert. Man braucht auch kein
+  Gleichheitszeichen, das macht es so praktisch.
+
+  A = B*123+C--+1  -> nach Verarbeitung von C, C=C-1
+  A = B*123+--C+1  -> vor Verarbeitung von C, C=C-1
+
+  Aus optischen Grnden wrde man natrlich Klammern
+  setzen. Dann sieht das so aus:
+
+  A = B*123+(C--)+1  -> nach Verarbeitung von C, C=C-1
+  A = B*123+(--C)+1  -> vor Verarbeitung von C, C=C-1
+
+  Auáerdem hilft es, Verwechselungen vorzubeugen:
+
+  A = B*123--C -> hier wird C subtrahiert, nachdem das
+                  un„re Minus berechnet wurde.
+  A = B*123++C -> hier wird C addiert, das un„re Plus
+                  wird ignoriert.
+  A = B*123(--C) -> Wrde einen Kompiler-Error erzeugen,
+                  da es in C kein implizites Malnehmen
+                  gibt und demnach der *-Operator zwischen
+                  123 und der Klammer '(' fehlt.
+  B*123+(C--) ->  K”nnte h”chstens als Teststatement
+                  dienen, da kein L-Value definiert ist!
+
+  Die Implementation fr den Compiler hat es ebenfalls in sich!
+  Es k”nnen beliebig viele gemischte Aussagen gemacht werden, wie
+  A++--++--. Der Compiler z„hlt automatisch aus und entscheidet dann,
+  ob inkrementiert, dekrementiert oder addiert/subtrahiert wird.

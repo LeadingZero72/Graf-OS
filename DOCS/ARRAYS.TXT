@@ -1,0 +1,24 @@
+
+
+  ARRAYS
+
+
+  Wofr brauche ich Arrays?
+
+  Fr Textformatierungen wird ein Array ben”tigt, welches
+  die Textdaten und Zeiger bereitstellt, dass sie nach und
+  nach abgearbeitet und zu Text verarbeitet werden.
+
+  Bei der Initialisierung hat man nur ein Array of Dword
+  vor sich und soll es mit Daten fllen.
+
+  Da es sich nicht lohnt, fr jedes Dword einen Zeiger
+  mitlaufen zu lassen, sollen sie mit einem Index getrennt
+  werden k”nnen. Dafr sind die eckigen Klammern '[]'.
+
+  Der Inhalt der Klammern '[??]' kann dabei immer nur
+  <Literal> sein.
+
+  Da der Index sich nur indirekt auf EDI und den Zeiger
+  bezieht, muá EDI nicht st„ndig neu geladen werden und
+  die Mehrfachnutzung klappt weiterhin reibungslos.

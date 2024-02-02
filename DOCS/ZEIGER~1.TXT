@@ -1,0 +1,156 @@
+
+
+  Beispiel:
+
+  struct A
+  {
+    byte A1,A2
+  }
+  struct B
+  {
+    byte B1,B2
+  }
+  struct C
+  {
+    B BB
+    A AA
+  }
+
+  A VarA
+  C VarC
+
+  Das bedeutet nun, das die Member von C selbst
+  Strukturen sind.
+
+  X = VarA.A1 läßt sich bereits kompilieren
+  X = VarC.AA.A1 wird als Struktur identifiziert, wie
+  oben auch. Dann wird der Member AA gesucht und
+  gefunden, weil er zu C bzw. VarC gehört. Da sein
+  Typ=Struct ist, wird das nächste Member kein Kind
+  von VarC mehr sein, sondern eines von A bzw. AA.
+
+  "Immer wenn ein Member selbst eine Struktur ist,
+   muß die Hilfsvariable, die die Ursprungsstruktur enthält
+   mit der Typedef des Members überschrieben werden,
+   damit MVerify() nicht in der falschen Kiste sucht."
+
+  "Die LastType-Variable wird dann trotzdem immer den
+   Datentypen des zuletzt abgegrasten Members enthalten."
+
+  Ich könnte den ganzen Tag lang Variablen und Strukturen
+  definieren und der Compiler wüßte immer, wo er die
+  nächste freie Stelle im Heap hat, um die Variablen
+  dort anzusiedeln (ebenso wie der Assembler, dem die
+  ganze Offsetberechnung überlassen sei).
+
+  Die Frage ist jetzt, wie geht das mit dynamischer
+  Reservierung zur Laufzeit ?
+  Die statische Reservierung von Strukturen geht immer
+  von der Gesamtgröße incl. aller Member aus. Jedes
+  Member hat dann seine Adresse relativ zum Start der
+  Struktur im Heap. Soll eine Struktur dynamisch im
+  'hohen Speicher', wie man früher sagte, untergebracht
+  werden, soll der Compiler nicht den Platz für die
+  Struktur reservieren, sondern nur für einen Zeiger!
+
+  A *VarA erzeugt einen typisierten Zeiger (Zeiger auf
+  Struktur, bzw. Datentyp kommt bei Zeigern immer mit
+  ins Packet.) Der Compiler/Assembler kann weiterhin
+  die Offsets für jeden Member auslesen, hinzu kommt
+  jedoch, daß die ASM-Befehle ein Indexregister benötigen,
+  worein zunächst der Wert der Pointervariablen
+  kopiert werden muß (gesetzt den Fall, der Speicher
+  wurde bereits mit new(sizeof(A) reserviert. Der Code
+  für new() wäre demnach in etwa:
+    mov ecx,TypSize
+    call getmem
+  Die Typedef für Pointer hat die gleiche Form, wie
+  normale Variablen, nur daß immer ein Zeiger auf die
+  anvisierte Typedef hinterlegt ist, hier: Typedef "A".
+  Jeder Pointer kann auch ein L-Value sein, wo ihm eine
+  Adresse zugewiesen werden kann, z.B.
+
+  VarA = new(sizeof(A))
+
+  Da VarA nun keine Struktur mehr ist, sondern ein Pointer,
+  kann man nicht ohne weiteres auf die Member zugreifen.
+
+  A = VarA.A1 ist die direkte Elementauswahl
+  A = VarA->A1 ist die indirekte Elementauswahl
+  *Aptr = &VarA ist die erstellung eines Zeigers auf
+  eine Heap-Struktur.
+
+  BEISPIEL
+
+typedef char EVAL_CHAR;
+EVAL_CHAR* expr;
+
+		// Skip spaces
+		while(*expr == ' ')
+			expr++;
+
+  Solange kein Dereferenzierungsoperator benutzt wird,
+  kann der Pointer wie eine Longintvariable zu Rechen-
+  zwecken benutzt werden, beispielsweise, um einen
+  String abzutasten.
+  Wird ein anführender Deref-Operator benutzt, ist nicht
+  mehr die Adresse gemeint, sondern der <type>, der sich
+  an dieser Adresse verbirgt, hier: EVAL_CHAR. Da hier
+  immer nur eine Variable eines bestimmten Typs gemeint
+  ist, können dann ebensoeinfach Operationen mit dem
+  Inhalt angestellt werden, zum Beispiel in Teststatements.
+
+			// Save the operation and position
+
+			EVAL_CHAR op = *expr;    -> Holt den aktuellen Wert an expr[0]
+			EVAL_CHAR* pos = expr;   -> Holt den aktuellen Wert von expr, wobei expr ein Pointer ist
+
+
+ "Es ist interessant zu sehen, wie der Sprung von einfachen Heapvariablen
+  zum 'hohen Speicher' funktioniert und daß darauf dann quasi der große
+  Multimedianutzen basiert, d.h. unendliche beliebige Datenmengen und
+  unendliche beliebige Verschachtelung, Realtime ohne Animation, echte
+  Interaktion sind plötzlich möglich..."
+ 
+ Wenn ich jetzt beginne, sorge ich dafür, daß bei der Variablenerzeugung
+ niemand bös ist, wenn da auf einmal ein * auftaucht^^
+ Dieser Stern sagt:
+ - Typ cool, Variablentyp ist aber Zeiger!
+ - Dementsprechend werden 8 Bytes reserviert und eine Variable mit ZeigerID
+   geschaffen, damit man sie wiederfinde.
+
+
+ Die Erzeugung ist erstmal trivial, ich muß ja nicht darauf zugreifen
+ und etwas machen. Wenn ich das aber will, seien folgende Dinge bedacht:
+ - Zeiger-Variablen werden nicht stumpf in den Akku geladen.
+ - Kommt ein *, dann ist der nächste Ausdruck garantiert eine Zeigervariable.
+   Da in C immer nur x[0] erreicht wird, reicht es, den Wert hinter [EAX] zu
+   loaden, denn es wäre allemal ein Load erwünscht :)
+ - Ist eine Variable ein Zeiger, kann man damit trotzdem rechnen, wie Schwein!
+   Nein, das kann man nicht! In C werden die Zeiger in Einheiten bewegt, der
+   der Datenbreite des Typs, auf den sie Zeigen, entspricht.
+
+ A=*Struktur.Element
+
+ A=Struktur->Element
+
+
+
+ Ich denke, es macht keinen Sinn, den Zeigern einen eigenen Datentypen
+ zu verleihen. Die Zeiger sind vielmehr eine modale Eigenschaft aller
+ bisherigen Datentypen, einschließlich erzeugter Strukturen! Das
+ Schlüsselwort <void> ist nur ein billiger Ersatz für: Ich hab noch
+ keinen Datentypen oder: Ich liefere nix zurück!
+
+ void I=1 gibt es also nicht!
+ 
+ 
+ ZEIGER UND AUSDRÜCKE
+
+ Aus Atomsicht sieht es so aus, daß am Anfang eventuelle Sternchen
+ mitgezählt werden. Das geht nur bei Zeigervariablen! Ist die Variable
+ ein Zeiger, hat aber keine Sternchen dabei, wird der Datentyp auf DWORD
+ gesetzt, damit Zeiger advanced werden können. Der Akku beinhaltet dann
+ die Adresse die die Zeigervariable selbst inne hat. Hat der Zeiger
+ andererseits Sternchen vornean, wird der Akku sooft dereferenziert, wie
+ Sternchen da waren. Somit werden dann echte Variablenzugriffe gemacht ;-P

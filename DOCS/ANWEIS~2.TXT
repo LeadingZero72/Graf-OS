@@ -1,0 +1,30 @@
+{
+  Ein Block (Anweisungsblock):
+
+  Die ganze Datei ist erstmal ein Block und beginnt mit einer Klammer
+  und endet mit einer Klammer.
+
+  In einem Block kann sich alles befinden. Hauptsache, am Ende der Datei
+  ist die Zwischensumme wieder bei Null!
+
+  Oft stellt der Blockbeginn das Rcksprunglabel dar oder das Blockende
+  das Abbruchlabel, je nachdem, welche Kontrollstruktur dahintersteckt.
+  Daher steht die Labelliste mit den Bl”cken in engem Zusammenhang.
+
+  <Block-Initiation>
+  {
+    Leerzeichen, Tablulator bzw. Crlf werden bersprungen
+    Kommentare (lang und kurz) -> Output
+    Funktionsdeklarationen und Prototypen -> Output
+    Variablendeklarationen und Strukturdefinitionen -> Compiler/Assemblerspeicher
+    Zuweisungen -> Output
+    Rckgabefreie Funktionsaufrufe -> Output
+    Kontrollstrukturen (zur weiteren Verschachtelung von Bl”cken->Rekursion!) -> Output
+    oder das unwiederbringliche Ende der Datei... -> return to caller
+  }
+
+  Was beim Kompilieren mit dem einzelnen Block passiert, ist egal, er wird
+  sowieso bersetzt, die „uáeren Gegebenheiten (parent-Block) sind es, die
+  Start/Ende-Position im Code observieren und evtl. Labels oder Sprnge
+  einfgen.
+}

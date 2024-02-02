@@ -1,0 +1,11 @@
+
+
+  Um IFELSE-Kontrollstrukturen fr boolsche
+  Variablen zu vereinfachen, gibt es das
+  Bool ? Whentruedo : Whenfalsedo - Konstrukt.
+
+  Die Variable Bool wird getestet, ob true oder false
+  und dann entweder links oder rechts vom Doppelpunkt
+  ausgefhrt. Kompiliert werden stets beide Codes und
+  die Fallabfrage selbst auch, lediglich die Syntax ist
+  hier vereinfacht und kommt ohne weitere Klammern aus.

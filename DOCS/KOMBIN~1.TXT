@@ -1,0 +1,7 @@
+
+
+  Die kombinierten Zuweisungen, wie +=, -=, *=, /=, %=,
+  &=, |= und $= lassen sich auf dieselbe Weise parsen, wie
+  die einfache Zuweisungen = . Hier wird statt I_STORE ein
+  passender anderer Code gewählt, der mit Modify-Write-Ops
+  der CPU arbeitet ;-)

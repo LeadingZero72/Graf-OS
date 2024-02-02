@@ -1,0 +1,11 @@
+
+
+  DAS COMPILER HAUPTPROGRAMM
+
+  Da die gesamte Sprache in eine Hierachie aus Anweisungsblöcken
+  zerlegt wird, reicht es hier, den Scanner zu initialisieren,
+  die Blockhierachie aufzurufen und danach zu schauen, daß die
+  Blockanzahl garantiert wieder Null ist, da sonst noch Klammern
+  fehlen!
+
+  Damit endet dann das Programm normal und kehrt zum Aufrufer zurück..

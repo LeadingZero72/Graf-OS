@@ -1,0 +1,70 @@
+
+
+  FUNKTIONSPARAMETER
+
+  - Die Parameter werden vor dem Call auf den
+    Stack geworfen. Innerhalb der Funktion liegen
+    die Parameter bei ss:[bp+4+Parameter], weil
+    ältere Elemente auf der Plus-Seite von SP
+    sind und weil IP und Stackframe zwischen der
+    aktuellen Stackposition und den Parametern
+    liegen. Daher die extra +4 in dem Term. Die
+    Parameterposition hängt dann vom Offset in der
+    Summe der Datentypen ab.
+
+  LOKALE VARIABLEN
+
+  - Die lokalen Variablen liegen, wie die Parameter
+    auf dem Stack, werden aber nachträglich dort
+    angelegt, quasi von überall innerhalb der Funktion.
+    Ihr Offset liegt also grundsätzlich auf der Minus-
+    Seite von ss:[bp].
+
+  - Da die lokalen Variablen auch Arrays enthalten
+    können und grundsätzlich mit aufsteigenden
+    Adressen gearbeitet werden soll, reicht es nicht,
+    absteigende Positionen für die lokalen Variablen
+    aufzusummieren, da die Reihenfolge dabei von
+    rechts nach links laufen würde. Alternativ wird
+    ermittelt, wieviele Variablen wieviel Platz
+    benötigen und dieser Wert dann von den aufsummierten
+    und von links nach rechts verlaufenden Offsets
+    abgezogen, um in den negativen Bereich zu gelangen.
+    Es wird also von links nach rechts aufsummiert,
+    und dann die Gesamtsumme von jedem Element abgezogen,
+    was auch getrennt passieren kann. Bei der Definition
+    wird die Summe weiter erhöht, die effektive Adresse
+    wird allerdings erst errechnet, wenn ein Zugriff
+    erfolgt. Bei dieser Vorgehensweise ist es allerdings
+    notwendig, daß alle lokalen Variablen vollständig
+    'forward' definiert werden, d.h. alle Variablen
+    müssen fertig definiert worden sein, bevor der erste
+    Zugriff auf eine davon erfolgt. Das erspart das
+    über-patchen aller Zugriffe am Ende einer Funktion
+    und der Assembler kann mit einer Hilfsliste weniger
+    auskommen.
+
+  - Die aktuelle Stackposition enthält IP. Ich müßte +2
+    addieren, damit ich IP überspringen kann. Nun kommt
+    noch der alte übergeordnete Stackframe hinzu, also
+    nochmal +2, macht zusammen +4. Jetzt liege ich bei
+    den Parametern. Die sind hier aber nicht gefragt,
+    sondern ich will zu den lokalen Variablen.
+    Gibt es nur 1 Byte, dann muß ich -1+0 rechnen, um
+    zu der Adresse zu kommen: ss:[bp-1+0].
+    Gibt es zwei Bytes, dann muß ich -2+0 für das erste
+    und -2+1 für das zweite rechnen.
+    Bei 3 DWORDS müßte ich -12+0 für das erste, -12+4
+    für das zweite und -12+8 für das letzte rechnen,
+    wobei -12+8,9,10,11 die einzelnen Bytes sind, die
+    in gewohnt aufsteigender Reihenfolge vorliegen.
+    Ich erreiche nie IP, weil IP wäre ss:[bp-12+12] in
+    dem Beispiel.
+
+  - Der alte Stackframe muß in jeder Funktion gesichert
+    werden und SP muß auf eine neue Stackposition verschoben
+    werden, damit die PUSH/POP-Befehle weiterhin funktionieren.
+    Das kann jedoch nur geschehen, nachdem alle Variablen
+    definiert worden sind. Daher wird das Patchlabel für
+    SUB SP,XXXX zwischengespeichert und am Ende der Funktion
+    in den Binärcode gepatcht.

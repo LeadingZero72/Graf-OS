@@ -1,0 +1,61 @@
+
+
+
+
+  SCHIEBEBEFEHLE UND C++
+
+
+  Schiebebefehle mssen immer ausgeklammert werden,
+  wenn sie zum Schluá berechnet werden sollen, weil
+  ihre Rangfolge h”her als multiplizieren ist.
+
+  Geschicktes 'arithmetisieren' klappt also nur mit
+  mindestens einer Klammer oO
+
+
+
+
+
+
+
+
+
+  ZEIGER AUF STRUKTUREN INNERHALB VON STRUKTUREN
+  (oder was eine Struktur ohne Member ist...)
+
+  Es ist nicht so, daá man in einer Anweisung endlos
+  oft dereferenzieren kann.
+
+  Es wird nur der Variablenwert dereferenziert, wenn
+  die Variable als <Zeiger> definiert wurde.
+
+  Alle weiteren Strukturelemente erh”hen nur den Offset,
+  fr den Variablenzugriff <nach> der Zeigerreferenzierung,
+  so wie er sp„ter in die Assembleranweisung kodiert wird.
+
+  Sollte nun als letztes Element eine Struktur angegeben
+  sein, kann es sich nur um einen Zeiger auf eine Struktur
+  handeln.
+
+  So kann jeder weitere Strukturzeiger aus den Variablen
+  entnommen und gepuffert werden, bis dann letztlich die
+  Elemente genutzt werden, die dahinterstehen und die
+  Daten repr„sentieren.
+
+    p = *structure1.structure2
+
+  Hier wrde der <LastType> von Members() eine Struktur
+  angeben.
+
+  Da aber keine Member dieser Struktur aufgefhrt sind,
+  kann nur ein Zeiger gemeint sein und die Variable muss
+  auch innerhalb der Struktur ein Zeiger sein, also nicht
+  die ausfhrliche Darbietung, sondern eine 32-Bit-Adresse.
+
+  Also wird im Compiler, wenn eine Struktur als Ergebnis
+  herauskommt, einen Pointer daraus machen, unabh„ngig
+  vom Zustand der Variablen.
+
+  Man k”nnte eine Fehlermeldung daraus generieren, welche
+  den Programmierer warnt, falls er versucht, eine Struktur
+  als Pointer zu verwenden oO

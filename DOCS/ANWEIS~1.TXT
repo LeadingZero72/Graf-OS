@@ -1,0 +1,91 @@
+
+  Der C-Compiler
+
+  "Die Recherchen haben ergeben: Aus Sicht des Compilers ist
+   alles eigentlich dasselbe..."
+
+  Der Compiler ruft nur "1" Routine auf, um ALLES zu kompilieren:
+  Block(). Ein Block besteht aus einer Reihe von m”glichen Compiler-
+  Befehlen, welche selbst auch Bl”cke erzeugen k”nnen und endet mit
+  einer geschweiften Klammer.
+  Um das reservieren lokaler Variablen zu erm”glichen, wird am Beginn
+  jedes Blocks der Heapzeiger gepusht und bei Blockende wieder gepoppt,
+  so daá alles tempor„re automatisch wieder freigegeben wird.
+
+  <Block>
+  .Funktions-Deklaration(<evtl. Parameter>)
+  .Struktur-Deklaration(<min. 1 Element>)
+  .Logische Kontrollstrukturen(<Direkte Anweisung>)
+  .Direkte Anweisungen
+
+
+  Funktions-Deklarationen
+
+  Prozedurprototypen sind vom Aufbau immer gleich. Erwartet wird
+  der Name eines Datentyps, sei es auch <void>.
+  Dann folgt ein Name, der weder in der Typenliste, noch in der
+  Funktionsliste auftaucht. Folgt dem Namen eine Klammer (, handelt
+  es sich um eine Funktionsdeklaration, die Anzahl der Parameter
+  h„ngt nun davon ab, wie schnell die schlieáende Klammer folgt.
+  Der Anweisungs-"block", der innerhalb der Funktion gilt, wird
+  durch einen eigenen Aufruf an die Routine Block() kompiliert.
+  Gleich danach wird der Heapzeiger wieder auf den Ursprnglichen
+  Wert gesetzt, um die lokalen Variablen wieder freizugeben, denn
+  alles, was innerhalb eines Blocks definiert wurde, gilt nur lokal.
+
+
+  Struktur-Deklarationen
+
+  Strukturen und Funktionen sind fr den Compiler ganz „hnlich.
+  Hier erwartet der Compiler ein bestimmtes Bild, um die Struktur incl.
+  aller ihrer Elemente zu registrieren und Doppeldeutigkeiten auszu-
+  schlieáen. Die Strukturen werden in der Liste Typedef abgelegt, wo
+  auch die Typen fr normale Variablen liegen.
+
+
+  Logische Kontrollstrukturen (if/else/for/do/while/switch/with)
+
+  Der Code innerhalb einer logischen Kontrollstruktur wird als
+  eigenst„ndiger Block() kompiliert und erh„lt somit seine eigenen
+  lokalen Variablen. Das gilt fr jede while-Schleife und jede
+  if-Konstruktion. Der tempor„re Variablencache drfte bestens
+  ausgenutzt sein. Nach dem Block springt der Heapzeiger wieder
+  auf die vorige Position zurück, so daá lokale Variablen freigegeben
+  werden.
+
+
+  Direkte Anweisungen
+
+  Direkte Anweisungen stellen die inneren Werte der C-Sprache dar.
+  Hier werden Variablen und Strukturen erzeugt und gerechnet, was
+  das Zeug h„lt. Die direkte Anweisung kann ein einziger Ausdruck
+  sein, oder sich in irgendeine Art von Zuweisung aufspalten, wobei
+  links/rechts gleichzeitig Variablen erzeugt werden k”nnen. Der
+  Grundtyp einer Berechnung ist im Grunde der, einer Variablen-
+  Erzeugung, nur daá auf die erneute Definition verzichtet werden
+  kann, sobald die Variablen existieren...
+
+  .Variablendefinitionen
+  .Zuweisungen
+  .Ausdrcke mit Operationen -+
+  .                          */%
+  .                          <<>>
+  .                          &&,||
+  .                          ==,!=,>=,<=,>,<
+  .                          ()
+  .                          un„res +-
+  .                          Variablen, Dereferenzierungen, Referenzierungen, Literale
+
+
+  Fazit
+
+  Hiermit w„re die normale C-Sprachhierachie schon komplett und
+  der Compiler fertig :-) Die n„chsth”here Schale, die C++
+  eingefhrt hat, ist die Objektorientierte Programmierung. Diese
+  stellt sicher, daá Funktionen nur mit Parametern der eigenen Klasse
+  angesprochen werden k”nnen und daá strukturierte Datensegmente
+  automatisch reserviert/freigegeben werden k”nnen.
+  Ob ich davon viel halte, weiá ich noch nicht. Es schr„nkt zu sehr
+  ein. Das Multitasking, welches mir vorschwebt, ist bereits darauf
+  ausgelegt, alles selbst zu erledigen. Auch hier wird sp„ter alles
+  mit "1" Aufruf SCHNELL erledigt, so wie es sein soll...

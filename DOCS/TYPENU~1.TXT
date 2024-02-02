@@ -1,0 +1,12 @@
+
+
+  Immer wenn Code in die Outputdatei geschrieben werden soll, wird
+  getestet, ob es sich dabei um einen PUSH oder POPxxx-Befehl handelt.
+  Denn in diesen beiden F'llen ginge, wenn noch Operationen dazwischen
+  liegen, die Typeninfo verloren. Deshalb wird in diesen F'llen die
+  Typeninfo auf einen seperaten Stack gelegt (TypStack), bzw gepoppt.
+  Bei Zuweisungen an Variablen/Strukturelemente ist es so, daß hier
+  der Bezeichner auf gleiche Weise erfaßt und auf den TypStack gelegt
+  wird, und später bei der entgültigen Zuweisung auf selbe Weise
+  zurückgeholt und auf Typenunterschiede durchlaufen werden kann,
+  wie die einzelnen Atome in Ausdrücken ;-)

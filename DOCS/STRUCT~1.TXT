@@ -1,0 +1,59 @@
+
+  Parsen von Strukturvariablen
+
+  Sobald der Type der Struktur bekannt ist und
+  noch ein '.' folgt, wird das nächste Element
+  gescannt und sein Ausdruck in dem Type gesucht.
+  Sobald er gefunden wurde, wird sein Type als
+  neuer LastType übernommen, da der Code sich auf
+  das Element bezieht und nicht generell auf die
+  Struktur. Solange der Elementtyp nicht 'struct'
+  ist, darf kein weiterer '.' folgen !
+
+  Ist das Element jedoch selbst eine Struktur,
+  dann muß ein '.' folgen und ihr Type temporär
+  übernommen, damit weitere Elemente darin gesucht
+  werden können.
+
+
+  UMGANG MIT STRUKTUREN OHNE ELEMENTAUSWAHL
+
+  Um die Strukturen als ganzes verwalten zu können,
+  ohne auf die einzelnen Elemente einzugehen,
+  verzichtet man bei der Eingabe auf den Punkt und
+  benutzt den Strukturnamen als R-Value oder Funktions-
+  Parameter.
+
+  Wenn C wirklich logisch ist, dann müßte das so
+  aussehen.
+
+  void* p
+  
+  struct Alpha
+  {
+    in beta
+  }
+
+  Alpha s
+
+  p = &s
+
+  Demnach kann die Übergabe bzw. Zuweisung nicht ohne
+  den Adreßoperator von statten gehen...muß ich nachsehen...
+
+
+  STRUKTUREN UND ZEIGER
+
+  Es kann vorkommen, daß ich in einer Struktur einen Zeiger auf eine weitere Struktur
+  speichern muß. Gerade die Systemstrukturen dienen nur dazu, alle weiteren zusammenzuhalten.
+
+  Das liegt unter anderem auch daran, daß das Gesamtsystem immer noch aus einzelnen Programmen
+  besteht, deren Variablen nicht fest in das Hauptprogramm gelinkt sind !
+
+  Wird eine Struktur geladen, werden die Elemente abgeklappert. Ist ein Element selbst auch eine
+  Struktur, muss noch mindestens 1 Element aus der Tieferen Ebene spezifiziert werden usw. bis
+  zum letzten Element. Dabei wird es aber grundsätzlich auch vorkommen, daß die Struktur nur als
+  Zeiger vorliegt und im Vorfeld schon dereferenziert werden muß. Das wird vom Programmierer
+  selbst durchgeführt, indem er anstelle des Punkts einen Pfeil zur Ankündigung des nüchsten
+  Elements verwendet. Dann wird dereferenziert. Der Datentyp wird zu dem Datentyp der Struktur,
+  dann können weitere Elemente folgen.  
