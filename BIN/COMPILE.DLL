@@ -1,0 +1,847 @@
+/***************************************************************************
+ * COMPILE.DLL, CPP -> Assembler Compiler 1.0
+ * Date: 14.Januar 2016
+ * Author: Alexander Graf
+ *
+ * C-Programmierung wird in Assemblercode übersetzt, wobei eine
+ * Plattformdatei als Filter f[r den assemblersprachbezogenen Output
+ * benutzt wird. Das erlaubt es, Code f[r verschiedenste Prozessoren
+ * zu kompilieren und lauff„hig zu machen. Als Beispieldatei dient
+ * IA386.CPC mit den PC-typischen Intel/AMD-Instruktionen heutiger
+ * Computer.
+ *
+ * Register H enth„lt 12 Bytes mit Fehler, Zeile und Quelldatei
+ * fr etwaige Rckgaben an den Aufrufer bereit.
+ *
+ * Erwartet: f=Quelldatei
+ *           p=Quellpfad
+ *           o=Zielpfad
+ *           s=Datei-Endung der Zieldatei
+ *           r=Ausfhrungspfad
+ *           t=Plattformspezifikationsdatei (z.B. 'IA386.INI')
+ *           h=Returnpointer fr Ergebnis/Fehlernummer
+ *
+ * Register  q=Quelltext
+ *           j=Quelltextposition
+ *           u=Assemblertext
+ *           v=Assemblertextposition
+ *           g=Container mit Datensegment: [10,20,1000]
+ */
+
+ //Compiler/Assembler-Datensegment
+  private Typedefs    = "24"    //Liste mit Typendefinitionen
+  private Variables   = "28"    //Liste mit Variablen 
+  private Codes       = "32"    //Container mit CPU-Codeklassen/Typen
+  private Functions   = "36"    //Funktions-Deskriptorliste
+  private Labels      = "40"    //Liste mit Labels und Sprungadressen
+  private FileStack   = "44"    //Stapel mit verschachtelt aufgerufenen Pfaden/Dateien (Array of Stringpair)
+  private Defines     = "48"    //Liste mit #define-Konstanten
+
+  private CText       = "64"    //Quelltext
+  private AsmText     = "68"    //Assemblertext
+  private TmpText     = "72"    //Tempor„rer String[1000]
+  private InputPath   = "76"    //Quellpfad
+  private OutputPath  = "80"    //Zielpfad
+  private AppPath     = "84"    //Ausfhrungspfad
+  private Ending      = "88"    //Datei-Endung der Zieldatei
+  private SourceFile  = "92"    //Name der Quelldatei
+  private Platform    = "96"    //Name der Plattformdatei
+  private IncludePath = "100"   //Ordner f[r Standard-Bibliothek
+  private TypStack    = "104"   //Stapel mit I_PUSH-Datentypen
+  private TempText    = "108"   //2. Tempor„rstring
+  private OutputFile  = "112"   //Name der Zieldatei
+  private BlockStack  = "116"   //Stapel mit Zeigern auf Startlabel und Endlabel fr break/continue
+
+  private HeapCount   = "144"   //Offset im Heap (dient am Ende als Heapgr”áe)
+  private HeapPatch   = "148"   //Output-Zeile fr Getmem-Patch im Assemblercode
+  private CodeLimit   = "152"   //Maximale Assemblertextl„nge
+  private Thesis      = "156"   //Bisherige Anzahl Klammern
+  private LastType    = "160"   //Letzte Typen-ID (Offset in Plattformarrays)
+  private BlockSP     = "164"   //Blockstackpointer
+  private TypSP       = "168"   //Datentypstackpointer
+  private StackLimit  = "172"   //Compilerstackbedarf
+  private TempA       = "176"   //
+  private TempB       = "180"   //
+  private TempC       = "184"   //
+  private TempD       = "g[188]" //
+  private LabelCount  = "192"   //Anzahl Label
+  private BlockCount  = "196"   //Anzahl Anweisungsbl”cke
+  private LocalFlag   = "200"   //Flag: Innerhalb einer Funktion ?
+  private LocalPos    = "204"   //Gr”áe des lokalen Stackframe
+  private WasReturn   = "208"   //Flag: Voriger Befehl war RETxx ? (Dann ist es nicht mehr n”tig, am Ende der Funktion den Return zu coden^^)
+  private MemberCount = "212"   //Anzahl Member (0..n)
+  private CompileText = "32"    //Textl„nge fr Quanshow.dll
+  private StatBCount  = "220"   //Gez„hlte Bl”cke
+  private StatVCount  = "224"   //Gez„hlte Variablen
+  private StatFCount  = "228"   //Gez„hlte Funktionen
+  private StatECount  = "232"   //Gez„hlte Ausdrcke
+  private StatLCount  = "236"   //Gez„hlte Loads
+
+
+
+ //Typdefinitionen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private TypName     = "04"    //Namensstring im Regfeld
+  private TypSize     = "8024"  //Daten/Strukturbreite
+  private TypID       = "8028"  //ID zur Erkennung von Funktionen
+  private TypMask     = "8032"  //Bitmaske (fr einfache typedefs)
+  private TypBits     = "8036"  //Bitposition (fr einfache typedefs)
+  private TypFunc     = "3"     //ID fr Funktionen in der Typliste
+  private TypVar      = "2"     //ID fr Variablen in der Typliste
+  private TypStrukt   = "1"     //ID fr Strukturen in der Typliste
+
+ //Strukturen innerhalb der Typedef ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private TypMembers  = "20"    //Anzahl Offset/Namen-Paare
+  private TypMName    = "24"    //Offset der Membernamen
+  private TypMTyp     = "4024"  //Offset der Membergr”áen
+
+ //Struktur fr Variablen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private VarName     = "04"    //Name im Regfeld
+  private VarParam    = "24"    //Parametersubliste
+  private VarType     = "28"    //Zeiger auf Typ-Container
+  private VarInit     = "32"    //Hier: Initialwert bei Variablen
+  private VarID       = "36"    //Zur Unterscheidung von Funktionen und Variablen!
+  private VarDeRefCnt = "40"    //Maximal erlaubte Anzahl der Dereferenzierungen des Zeigers (min. 1 bei Zeigern)
+  private VarFunction = "01"    //'Variable ist eine.Funktion'
+  private VarVariable = "02"    //'                 .normale Variable'
+  private VarStruct   = "04"    //'                 .Struktur'
+
+ //Funktionsparameter innerhalb Funktion (in der Variablenliste) ÄÄÄÄÄÄÄÄÄÄÄ¯
+  private ParName     = "04"    //Parametername
+  private ParType     = "24"    //Parametername
+  private ParDeRefCnt = "28"    //Parameter ist als Zeiger definiert
+
+ //Label innerhalb der Labelliste ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private LabName     = "04"    //Labelbezeichner
+  private LabOffset   = "24"    //Offset im "Code"
+
+ //Dateien auf dem Dateistack ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private FS_Filename = "24"    //Dateiname
+  private FS_Path     = "28"    //Pfad
+  private FS_Offset   = "32"    //Leseposition
+
+ //#define-Konstanten ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private DefineName  = "4"     //Name
+  private DefineValue = "24"    //Wert
+
+
+ //Normale Operationen (Akku erh„lt Zwischenergebnis) ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private I_JNE       = "25"
+  private I_JE        = "26"
+  private I_JMP       = "27"
+  private I_TEMP      = "28"
+  private I_CMPNE     = "29"
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                     StrMsg(String,Data)                      ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³ Diese Routine h„tte ich schon vor Jahren schreiben sollen.   ³
+       ³ Formatierter Debug-Text im eigenen Fenster, lol.             ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc StrMsg(2)
+{
+  pop(a) push(d)
+  d=Data cd(SysRoot) call('MSGBOX.DLL') t='Look at this' d=0 u=a[0] v=a[4] x=512 y=20
+  pop(d)
+}
+
+
+
+
+proc CopyComments(0)
+{
+  while(1)
+  {
+    //<End of file>-Fehler testen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(j-4>=q[0]) break; //Bail(2)                                     //Solange kein šberlauf
+
+    //Leerzeichen auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j] Char==32) j=j+1 continue;                         //oder noch Leerzeichen
+
+    //Crlf auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j] Integer==0x0a0d) j=j+2 continue;                  //und noch Crlf
+
+    //Einzeilige Kommentare kopieren ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j] Integer==0x2f2f) CopyLineCRLF() Put('%n',0) continue;
+
+    //Mehrzeilige Kommentare kopieren ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j] Integer==0x2a2f)                       //Kommentar wird eingeleitet ?
+    {                                              //
+      while(1)                                     //Fr alle Zeichen
+      {                                            //Wenn Kennung2 auftaucht, CRLF und fertig..
+        if(q[j] Integer==0x2f2a) j=j+2 Put('*/%n',0) continue 2;
+        u[v]=bptr q[j] Char                        //Ansonsten Zeichen kopieren
+        j=j+1 v=v+1                                //und Zeiger weiter bewegen
+        if(j-4>=q[0]) Bail(18)                     //(EoF-Error)
+      }                                            //
+    }                                              //
+    break;                                         //..
+  }                                                //
+}
+
+proc ScanFilename(0)
+{
+  push(u,v) u=g[TmpText] v=0                      //TmpText zurücksetzen
+  while(1)                                        //Für alle Zeichen
+  {                                               //Wenn Kennung2 auftaucht, CRLF und fertig..
+    if(q[j]Char==62)||(q[j]Char==34) break;       //Kennung nicht skippen, aber abbrechen..
+    u[v+4]=bptr q[j] Char                         //Ansonsten Zeichen kopieren
+    j=j+1 v=v+1                                   //und Zeiger weiter bewegen
+    if(j-4>=q[0]) Bail(18)                        //(EoF-Error)
+  }                                               //endw
+  u[0]=v pop(v,u)                                 //Länge speichern
+}
+
+//Label(Name) Erzeugt ein Label an u[v], nachdem es den Labelbezeichner
+//registriert und mit einer Nummer erg„nzt hat. Das Label wird von einem
+//Doppelpunkt gefolgt.
+
+proc Label(1)
+{
+  pop(a) push(c,x,y,q)              //()
+  x=a[0]                            //Gewnschten Namen laden
+  y=g[LabelCount]+1 g[LabelCount]=y //Anzahl Label erh”hen
+  append(0,0,20,g[Labels],@c)       //neuen Container fr neues Label
+  FText('%s%da',@x) c[LabName]=q    //Name+Nummer registrieren
+  c[LabOffset]=v                    //Adresse im Zielcode
+  a=c pop(q,y,x,c)                  //Rckgabe in A
+}
+
+proc BlockOrExpression(0)                    //Je nachdem, ob ein einzelner Ausdruck, oder ein ganzer Block folgt, wird hier anders kompiliert:
+{                                            //
+  push(a,b)                                  //()
+  Find('{') b=a                              //Nach Blockklammer ausschau halten
+  if(b) Block()                              //Wenn Blockklammer, Block und zweite Klammer zwingend
+  if(b==0) Expression()                      //Sonst nur 1 <Ausdruck>
+  pop(b,a)                                   //()
+}                                            //
+proc FoldedExpression(0)                     //Manche Ausdrcke sind immer eingeklammert.
+{                                            //
+  Need('(')                                  //Klammer ist zwingend
+//  Expression()                               //Ausdruck in der Klammer muss ungleich Null sein
+  Equates()
+  Need(')')                                  //Klammer ist zwingend
+}                                            //
+
+
+
+
+/*
+  Ein Block hat eine Interessante Eigenschaft, was Funktionen angeht:
+  Immer wenn der Block vorbei ist, weiss der Compiler, wieviel Bytes
+  lokale Variablen dort erzeugt wurden. Und das geht durch die Rekursion
+  weiter und weiter. Der Compiler wertet das so aus, dass dann ebensoviele
+  Stackvariablen neben den Parametern ben;tigt werden...
+  Zur Erinnerung: Immer wenn eine Kontrollstruktur beginnt, beginnt ein
+  eigenst„ndiger Block, der seine Variablen aus dem Heap bezieht und
+  dessen Variablen auch nur solange was Wert sind!
+  Deshalb soll Block selbstst'ndig pushen und poppen, was das Zeug h'lt,
+  um immer Track zu halten. Interessant ist aber auch, dass die Variablen,
+  die innerhalb von Kontrollausdrcken erzeugt werden, dann immer noch
+  innerhalb des 'usseren Blocks liegen...
+
+
+  Beginnt eine Funktion, soll nicht daraus heraus gebreakt werden können,
+  weil dann der allgemeine Stack nicht mehr stimmt (es sei denn, das wird
+  bercksichtigt).
+
+  Der Trick bei den Blocks besteht darin, daá beide Label sofort erzeugt
+  werden k”nnen, auch wenn letzteres erst am Ende in den Code gepr„gt wird.
+
+  Jetzt ist es aber auch so, daá nicht jede Kontrollstruktur, die einen
+  Block erzeugt, diesen auch listen soll. If/else und with sind so Kandidaten.
+  Es h„tte dann auch keinen Sinn, der Programmierin aufzubrden, alle
+  Strukturen mitzuz„hlen, um zum richtigen Indikator zu kommen. Es sind nur
+  die Schleifen und Switch interessant, weil hier gr”áere Entscheidungen
+  getroffen werden. Auch wenn jede der interessanten Kontrollstrukturen
+  eigens behandelt werden muá, reicht dafür ein einziger Call, um den
+  Stack zu aktualisieren, neue Label zu erstellen und (fr den Compiler)
+  wieder zu l”schen, wenn die Konstruktion endet.
+
+  Wenn ich einen Block, wie auch immer hinter mich gebracht habe, sind die Labels
+  immer noch im Code wrden aber nie angesprungen, weil die n„chsth”here Ebene
+  gemeint ist! Jedes weitere Stackfeld zurck wrde die n„chste Ebene bedeuten, d.h.
+  Parent, nicht Nachbarelement. Der Compiler wrde also niewieder Sprnge in diese
+  Richtung machen, wenn der Block vorber ist. Wird die n„chsth”here Ebene ge-breakt,
+  dann wird aber lediglich ein Jump-Befehl gecodet. Der Compiler liest das Programm
+  nur 1x durch und bersetzt es dabei...
+  ..continue erzeugt einen Sprung an den aktuellen Block oder x weitere Elemente zurck.
+  ..break erzeugt einen Sprung unter den aktuellen Block oder x weitere Elemente zurck.
+  ..Block() schlieát den Block mit Pop ab.
+
+  "Sobald der Compiler mit dem kompilieren einer Schleife/Switch-Anweisung fertig ist,
+   werden die Label dafr nicht mehr ben”tigt und mssen aus dem Stack entfernt werden,
+   da die n„chste break/continue-Anweisung ein falsches Ziel aussuchen wrde..."
+
+*/
+
+//PushBlock('ConstName') Hinterlegt Label fr break/continue-Verschachtelung (ansonsten nicht benötigt)
+proc PushBlock(1)
+{
+  pop(a) push(c,d,q) d=a b=g[BlockStack] c=g[BlockSP]     //Blockstackvariablen in B und C
+  FText('%s',d) Label(q) b[c]=a free(q)                   //Rcksprunglabel und
+  g[LabelCount]=g[LabelCount]-1                           //(Labelzahl verringern, damit die Nummern von Start und Ende gleich sind :)
+  FText('end%s',d) Label(q) b[c+4]=a free(q)              //Abbruchlabel erstellen
+  Put('%s:%n',b[c]+LabName)                               //Startlabel sofort schreiben
+  g[BlockSP]=c+8 if(c>g[StackLimit]) Bail(45)             //!!Stack darf nicht berlaufen!!
+  a=b[c] b=b[c+4] pop(q,d,c)                              //()
+}
+
+//PopBlock() Hinterlegt Label fr break/continue-Verschachtelung (ansonsten nicht ben”tigt)
+proc PopBlock(0)
+{
+  push(b,c) b=g[BlockStack] c=g[BlockSP]-8         //Blockstackvariablen in B und C
+  if(c<0) Bail(46)                                 //!!Stack darf nicht aufgefressen werden!!
+  g[BlockSP]=c a=b[c+4] Put('%s:%n%n',a+LabName)   //Abbruch-Label ans Ende setzen
+  clear(b[c],b[c+4]) pop(c,b)                      //Beide Label wieder entfernen
+}
+
+//GetBlock() A=Label1, B=Label2. Holt den x-ten Block, um die Label zu verwerten, l„át die Daten aber so stehen, fr mehrfache Auswertung.
+proc GetBlock(1)
+{
+  pop(a) a=-a[0]*8+g[BlockSP]-8                    //Gewnschten Block laden
+  if(a>g[StackLimit]) Bail(45)                     //!!Stack darf nicht berlaufen!!
+  if(a<0) Bail(46)                                 //!!Stack darf nicht aufgefressen werden!!
+  a=a+g[BlockStack]                                //(Phys. Addr addieren)
+  b=a[4] a=a[0]                                    //Labels in A und B zurckgeben..
+}
+
+
+
+
+
+//Block() Berechnet einen ganzen Anweisungsblock innerhalb geschweifter Klammern. Das ist die höchste Ebene, alles 'C++' befindet sich hierin !
+proc Block(0)
+{
+  push(b,c,e,f,k,x,y,z)
+  Need('{') g[BlockCount]=g[BlockCount]+1
+  g[StatBCount]=g[StatBCount]+1
+  while(1)
+  {
+/*
+    push(a,w,x)
+    w=8362016 w=w[0] x=0
+    if(w!=0) x=x+1 w=w[0] if(x<100) repeat
+    Put('%nremainder of memory = <%da>    %n',@x) SaveFile() Play(2)
+    pop(x,w,a)
+*/
+
+    //Semikolon ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Char==59)
+    {
+      j=j+1
+      continue;
+    }
+    //Whitespaces und Kommentare ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    CopyComments()
+
+    //Block-Ende ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Char==125) j=j+1 break;
+
+    //Dateiende  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Char==0)||(q[j-1]Char==0) PopSource() continue;          //Wenn Quelldatei komplett durchlaufen, dann solange noch brige Dateien:
+
+    //Annehmen, daá RET nicht der letzte Befehl ÄÄÄÄÄÄÄÄÄÄ¯
+    g[WasReturn]=0
+
+    //<include>: ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x6c636e69)&&(q[j+4] Integer==0x6475)&&(q[j+6]Char==0x65)
+    {
+      j=j+7
+
+      //Entweder lokal zum Compiler
+      Find('<') if(a)
+      {
+        j=j+1 ScanFilename() Need('>')
+        PushSource(g[IncludePath],g[TmpText])
+        continue;
+      }
+      //Oder lokal zur Quelldatei
+      Find('"') if(a)
+      {
+        j=j+1 ScanFilename() Need('"')
+        PushSource(g[InputPath],g[TmpText])
+        continue;
+      }
+    }
+
+
+    //'public' ™FFENTLICHE VARIABLEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x6c627570)&&(q[j+4]Integer==0x6369) j=j+6 Put('public ',0)
+
+    //'extern' EXTERNE VARIABLEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x65747865)&&(q[j+4]Integer==0x6e72) j=j+6 Put('extern ',0)
+
+
+
+    //link <DLL>: ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x6b6e696c)
+    {
+      j=j+4 Need('<') ScanFilename() Need('>')
+      Put('link <%s>%n',g+TmpText)
+      continue;
+    }
+
+    //asm: Inline-Assembler ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j] Integer==0x7361)&&(q[j+2] Char==0x6d)
+    {
+      j=j+3
+      Need('{')
+      while(1)
+      {
+        if(q[j]Char==125) j=j+1 break;
+        u[v]=bptr q[j] Char
+        j=j+1 v=v+1
+        if(j-4>q[0]) Bail(18)
+      }
+      Put('%n%n',0)
+      continue;
+    }
+
+    //#typedef: Typendefinition einholen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x70797423)&&(q[j+4]==0x66656465)
+    {
+      Put('#typedef ',0)
+      j=j+8
+      append(0,0,8100,g[Typedefs],@x)
+      Scan() c=a
+      find(g[Typedefs],c,@a) if(a) Bail(19)
+      Put(c,0) strcpy(c,x+TypName)
+      Need(',')  Put(', ',0)
+      Scan() c=a Put(c,0) Number(c) x[TypSize]=a
+      Need(',')  Put(', ',0)
+      Scan() c=a Put(c,0) Number(c) x[TypMask]=a
+      Need(',')  Put(', ',0)
+      Scan() c=a Put(c,0) Number(c) x[TypBits]=a
+      x[TypID]=TypVar
+      Put('%n',0)
+      continue;
+    }
+
+    //#define Konstantendefinition bernehmen ÄÄÄ¯
+    if(q[j]==0x66656423)&&(q[j+4]==0x20656e69)
+    {
+      Put('#define ',0)
+      j=j+8
+      append(0,0,4,g[Defines],@x)
+      Scan() c=a
+      find(g[Defines],c,@a) if(a) Bail(19)
+      Put(c,0) strcpy(c,x+DefineName)
+      Need('=') Put(' = ',0)
+      Scan() c=a Put(a,0) Number(c) x[DefineValue]=a
+      Put('%n',0)
+      continue;
+    }
+
+    //struct Strukturdeklaration erkennen ÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x75727473)&&(q[j+4] Integer==0x7463)
+    {
+      Put('%nstruct ',0)
+      j=j+6
+      Scan() c=a Put(c,0)
+      a=c[4] Char if(a<65)||(a>122) Bail(20)
+                  if(a>90)&&(a<97)  Bail(20)
+      find(g[Typedefs],c,@a) if(a) Bail(21)
+      append(0,0,8100,g[Typedefs],@b)
+      b[TypID]=TypStrukt
+      strcpy(c,b+TypName)
+      Put('%n{%n',0) Need('{')
+      e=0
+      f=0
+      while(1)
+      {
+        Scan() x=a Put('%t1%s ',@x)
+        find(g[Typedefs],x,@k) if(k==0) Bail(22)
+        if(k[TypID]==TypFunc) Bail(23)
+        n=k[TypSize]
+        while(1)
+        {
+          SkipSpaces() y=0
+          if(q[j] Char==42) j=j+1 Put('*',0)y=y+1 repeat
+          Scan() c=a Put(c,0)
+          strcpy(c,@a) b[f>>2+TypMName]=a
+          Find('[') c=a a=1 if(c)
+          {
+            Put('[',0)
+            j=j+1 Scan() c=a Put(c,0)
+            Need(']')
+            Put(']',0)
+            Number(c)
+          }
+          b[f>>2+TypMTyp]=k
+          e=n*a+e f=f+1
+          Find(',') if(a) j=j+1 Put(', ',0) CopyComments() continue;
+          Put('%n',0)
+          CopyComments()
+          if(q[j]Char==125) break 2;
+          break;
+        }
+      }
+      b[TypSize]=e
+      b[TypMembers]=f
+      Need('}') Put('}%n%n',0)
+      continue;
+    }
+
+    //IF/ELSE-STATEMENT ÄÄÄÄÄÄ¯
+    if(q[j]Integer==0x6669)
+    {
+      j=j+2
+      Logicals()
+      Label('else') b=a
+      Code(I_JE,b+LabName)
+      BlockOrExpression()
+      CopyComments()
+      if(q[j]==0x65736c65)
+      {
+        j=j+4
+        Label('endif') c=a
+        Code(I_JMP,c+LabName)
+        Put('%n%s:%n',b+LabName)
+        BlockOrExpression()
+        Put('%s:%n%n',c+LabName) continue;
+      }
+      Put('%s:%n%n',b+LabName) continue;
+    }
+
+    //WHILE-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x6c696877)&&(q[j+4]Char==0x65)
+    {
+      j=j+5
+      PushBlock('while') c=b b=a
+//DEBUG UM DIE COMPILER...
+Pointer()
+//DEBUG UM DIE COMPILER...
+      Logicals()
+      Code(I_JE,c+LabName)
+      BlockOrExpression()
+      Code(I_JMP,b+LabName)
+      PopBlock() continue;
+    }
+
+    //DO/WHILE-STATEMENT ÄÄÄÄÄ¯
+    if(q[j]Integer==0x6f64)&&(q[j+2]Char==32)
+    {
+      j=j+3
+      PushBlock('do') b=a
+      BlockOrExpression()
+      if(q[j]==0x6c696877)&&(q[j+4]Char==0x65)
+      {
+        j=j+5 Logicals()
+        Code(I_JNE,b+LabName)
+      }
+      PopBlock() continue;
+    }
+
+    //FOR-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Integer==0x6f66)&&(q[j+2]Char==0x72)
+    {
+      j=j+3
+      Need('(') Expression()
+      PushBlock('for') c=b b=a
+      Need(',') Equates()
+      Code(I_JE,c+LabName)
+      Need(',') Expression() Need(')')
+      BlockOrExpression()
+      Code(I_JMP,b+LabName)
+      PopBlock() continue;
+    }
+
+    /*
+      Das SWITCH-Statement soll die Assembly optimieren,
+      indem ein vorberechneter Betrag mit KONSTANTEN
+      verglichen wird. Dadurch kann mit einem Register
+      gerechnet werden!
+    */
+    //SWITCH-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x74697773)&&(q[j+4] Integer==0x6863)
+    {
+      j=j+6
+      PushBlock('switch') c=b
+      FoldedExpression()
+      Need('{') CopyComments() SkipSpaces()
+      z=g[LastType]
+
+      //Solange keine schlieáende Blockklammer
+      while(q[j]Char!=125)
+      {
+        CopyComments()
+
+        //'case'-Schlsselwort ?
+        if(q[j]==0x65736163)
+        {
+          j=j+4
+          SkipSpaces()
+          Scan() //Number(g[TmpText])
+          Need(':') CopyComments()
+          Label('endcase') b=a
+          x=g[TmpText]
+          y=b[LabName]
+          g[LastType]=z
+          Code(I_CMPNE,@x)
+          BlockOrExpression()
+          CopyComments()
+          Code(I_JMP,c+LabName)
+          Put('%n%s:%n',b+LabName)
+          continue;
+        }
+        BlockOrExpression() CopyComments() break;
+      }
+      SkipSpaces() Need('}') PopBlock()
+      Put('%n%n',0) continue;
+    }
+
+    //break-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x61657262)&&(q[j+4]Char==0x6b)
+    {
+      j=j+5 a=1
+      if(q[j]Char!=59) Scan() Number(g[TmpText])
+      GetBlock(a-1) Code(I_JMP,b+LabName)
+      Need(';') continue;
+    }
+
+    //continue-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x746e6f63)&&(q[j+4]==0x65756e69)
+    {
+      j=j+8 a=1
+      if(q[j]Char!=59) Scan() Number(g[TmpText])
+      GetBlock(a-1) Code(I_JMP,a+LabName)
+      Need(';') continue;
+    }
+
+    //return-STATEMENT ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x75746572)&&(q[j+4]Integer==0x6e72)
+    {
+      j=j+6 Need('(')
+      Find(')') if(a==0)
+      {
+//DEBUG, UM COMPILER ANZUGLEICHEN ...HIER FEHLTE SOWIESO DER TYP, TOTAL INSTABIL SOWAS
+        Pointer()
+//DEBUG, UM COMPILER ANZUGLEICHEN ...HIER FEHLTE SOWIESO DER TYP, TOTAL INSTABIL SOWAS
+        Expression()
+      }
+      Need(')')
+      Put('%t4mov sp,bp%n%t4pop bp%n',0)
+      Put('%t4retn%n',0)
+      g[WasReturn]=1
+      continue;
+    }
+
+    //AUSDRUCK BEGINNT MIT ++C/--C ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Integer==0x2b2b) Expression() continue;
+    if(q[j]Integer==0x2d2d) Expression() continue;
+
+    //Zuweisung ber Pointer erkennen
+    if(q[j]Char==42)
+    {
+      Expression()
+      continue;
+    }
+    //'far ' HEILIGE FAR-FUNTIONEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]==0x20726166) j=j+4 Put('far ',0)
+
+
+
+    //.omozOQ
+
+
+    //Das n„chste Wort laden
+    z=j Scan() c=a while(1)
+    {
+      //VARIABLEN ERZEUGEN ÄÄÄÄÄÄÄÄÄÄ¯
+      find(g[Typedefs],c,@x) if(x)
+      {
+        //Variablentyp bernehmen
+        Put(c,0) Put(' ',0)
+
+        //Dann werden reihenweise Variablen dieses Typs erstellt
+        while(1)
+        {
+          g[StatVCount]=g[StatVCount]+1
+
+          //(Annahme, dass kein Zeiger)
+          SkipSpaces() y=0
+          if(q[j]Char==42) j=j+1 Put('*',0) y=y+1 repeat
+
+          //Namen scannen
+          Scan() c=a Put(c,0)
+
+          //Neue Variable fr die Funktion erzeugen (Datentyp der Funktion)
+          append(1,0,100,g[Variables],@e)
+          strcpy(c,e+VarName)
+          e[VarType]=x
+
+
+          //FUNKTIONS-DEKLARATION ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+          if(q[j]Char==40)
+          {
+            e[VarID]=VarFunction
+
+            //Erkl„ren, daá Variablen innerhalb einer Funktion nur auf lokalem Stack aufgebaut werden sollen. Offset im lokalen Bereich von links nach rechts gesehen, beginnt bei Null
+            g[LocalFlag]=1
+            g[LocalPos]=0
+
+            //Klammer auslassen, jetzt folgen evtl. Parameter
+            j=j+1 Put('(',0)
+
+            //Lesezeichen in den Variablen setzen, damit die lokalen Variablen nach dem Funktionsblock wieder entfernt werden k”nnen, zwecks m”glicher Mehrfachnutzung in der Namensgebung
+            a=g[Variables] a=a[8]
+            push(a)
+
+            //Keine schlieáende Klammer? Dann (weitere) Parameterdeklaration:
+            while(q[j]Char!=41)
+            {
+              //Weiteren Typenbezeichner scannen
+              Scan() find(g[Typedefs],a,@c) if(c==0) Bail(40)
+              Put(a,0) Put(' ',0)
+
+              //(Annahme, dass kein Zeiger)
+              SkipSpaces() x=0
+              if(q[j]Char==42) j=j+1 Put('*',0) x=x+1 repeat
+
+              //Jetzt den Parameternamen scannen               
+              Scan() Put(a,0)
+              find(e[VarParam],g[TmpText],@a) if(a) Bail(41)
+
+              //Die Funktionsvariable hat eine Parameterliste, damit gegen doppelte Parameternamen gecheckt werden kann.
+              append(0,0,12,e[VarParam],@a)
+              strcpy(g[TmpText],@b)
+              a[ParName]=b
+              a[ParType]=c
+              a[ParDeRefCnt]=x
+
+              //Funktionsparameter werden nun kurzzeitig als Variablen eingeblendet
+              append(1,0,100,g[Variables],@a)
+              strcpy(g[TmpText],a+VarName)
+              a[VarType]=c
+              a[VarID]=VarVariable
+              a[VarDeRefCnt]=x
+
+              //Bei 'Komma' weitere Parameter, ansonsten Parameterzeile abschlieáen
+              Find(',') if(a) j=j+1 Put(', ',0) continue;
+              break;
+            }
+            //Wenn Parameter, dann bitte mit Klammer abschliessen
+            Need(')') Put(')',0)
+            SkipSpaces()
+
+            //Hat die Funktion keinen Implementationsteil ? Dann Parameterliste/Lokales wieder leeren und weitermachen mit der Variablendefinition (bzw. dem Rckgabeparameter der Funktion)
+            if(q[j]Char==59)
+            {
+              j=j+1 Put(';%n',0)
+              pop(a) erase(a[0])
+              g[LocalFlag]=0
+              g[LocalPos]=0
+              break;
+            }
+
+            //Stackframe erzeugen
+            Put('%n%t4push bp%n%t4mov bp,sp%n%t4sub sp,0x0000%n',0)
+
+            //Patchlabel berechnen und Funktionsblock kompilieren
+            b=u+v-6
+            push(b)
+            Block()
+            pop(b)
+
+            //Gibt es ber dem Block lokale Variablen zu patchen (ganz oben: <sub sp,????> )
+            if(g[LocalPos])
+            {
+              push(q) x=g[LocalPos]
+              FText('%h4',@x)
+              b[0]=q[4]
+              free(q) pop(q)
+            }
+
+            //Am Ende des Blocks werden lokale und Parameter wieder vom Ende der Variablenliste gel”scht, damit es nicht zu Verdopplungen kommt und lokales lokal bleibt, aber der Compiler wird auf HEAP zurckgestellt, quasi Ruhemodus fr die lokalen Dinge.
+            pop(a) erase(a[0])
+            g[LocalFlag]=0
+            g[LocalPos]=0
+
+            //Sofern der letzte Befehl kein Return ist, Rckkehr aus der Funktion coden.
+            if(g[WasReturn]==0)
+            {
+              //Stackframe am Funktionsende wiederherstellen
+              Put('%t4mov sp,bp%n%t4pop bp%n',0)
+
+              //Return und endp zum Abschluá in die Datei schreiben
+              if(e)    Put('%t4retn%n',0)
+              if(e==0) Put('%t4ret%n',0)
+            }
+
+            //Funktion am Ende abschlieáen und etwas Platz lassen
+            Put('endp%n%n%n%n%n',0) break;
+          }
+
+          //VARIABLEN-DEFINITIONEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+          e[VarDeRefCnt]=y
+          e[VarID]=VarVariable
+          if(y) g[HeapCount]=g[HeapCount]+4
+          else  g[HeapCount]=g[HeapCount]+x[TypSize]
+
+          //Fr lokale Variablen die Gesamtgr”áe mitz„hlen
+          if(g[LocalFlag])
+          {
+            if(y) g[LocalPos]=g[LocalPos]+4
+            else  g[LocalPos]=g[LocalPos]+x[TypSize]
+          }
+
+          Find('=') if(a)
+          {
+            Expression()
+/*
+            Put(' = ',0)                           //und folgende Konstante 
+            j=j+1 a=1                              //
+            if(q[j]Char==38)                       //Wird der Adressoperator verwendet, ist es keine numerische Zahl, sondern eine Variable!
+            {                                      //
+              j=j+1 Put('&',0)                     //
+
+              Scan() Put(g[TmpText],0)             //
+
+              find(g[Variables],g[TmpText],@a) if(a==0) Bail(47) //!!Adressoperator kann nur auf Variablen verwendet werden!! 
+              e[VarInit]=0 a=0                     //
+            }                                      //
+            if(a)                                  //Wenn ohne Adressoperator
+            {                                      //
+              Scan() c=a Put(c,0)                  //in Assemblercode bernehmen.
+              Number(c) e[VarInit]=a               //Initialisierungswert speichern
+            }                                      //
+*/
+
+          }
+          //Bei Komma, weitere Variablen dieses Typs..
+          Find(',') if(a) j=j+1 Put(',',0) continue;
+          Put('%n',0) break;
+        }
+        Put('%n',0) continue 2;
+      }
+      j=z Expression() continue 2;
+    }
+    Bail(24)                                                 //"Invalid instruction"
+  }
+
+  //Bl”cke drfen sich nicht stapeln, lol..
+  g[BlockCount]=g[BlockCount]-1 if(g[BlockCount]<0) Bail(37)
+  pop(z,y,x,k,f,e,c,b)
+}
+
+
+
+/*      .                                                              .
+  ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+        ³  HAUPTPROGRAMM - COMPILE_EVERYTHING                          ³
+        ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+  stack(16300)                         //Gengend Stack fr Rekursion(en)
+  InitScanner()                        //Scanner initialisieren
+
+  Put('%t4call main%n%t4retf%n',0)
+  Put('%t4call runtime%n%t4retf%n',0)
+  Put('%t4call destructor%n%t4retf%n',0)
+
+
+
+  Block()                              //Blockhierachie durchlaufen
+  if(g[BlockCount]) Bail(38)           //!!Es drfen keine Bl”cke brig sein!!
+  Bail(0)                              //Ohne Fehler zurck zum Aufrufer...
+//Ende COMPILE.DL

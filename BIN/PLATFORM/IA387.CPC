@@ -1,0 +1,457 @@
+/*
+ * Subject: IA387.CPC (Compiler-Plattform-Codes fÅr IA387 basierte Prozessoren mit Floating-Point Unit)
+ * Date:    17. Januar 2016
+ * Author:  Alexander Graf
+ *
+ * LÑdt die prozessorspezifischen Codes ins Compiler/Assembler-
+ * Datensegment.
+ *
+ * öbergabe : G=Compiler/Assemblerdatensegment
+ */
+
+  private Codes       = "32"    //Container mit CPU-Codeklassen/Typen
+
+ //Datentypcodes, so kann fÅr jeden Datentypen ein anderer CPU-Code passend zur jeweiligen Operation gew‰hlt werden
+  private I_BYTE      = "00"
+  private I_WORD      = "04"
+  private I_DWORD     = "08"
+  private I_FLOAT     = "12"
+  private I_REAL      = "16"
+  private I_MMX       = "20"
+  private I_SSE       = "24"
+  private I_REX       = "28"
+  private I_STRING    = "32"
+
+ //Normale Operationen (Akku erhÑlt Zwischenergebnis) ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒØ
+  private I_NEG       = "00"
+  private I_PUSH      = "01"
+  private I_POPADD    = "02"
+  private I_POPSUB    = "03"
+  private I_POPMUL    = "04"
+  private I_POPDIV    = "05"
+  private I_POPPOT    = "06"
+  private I_STORE     = "07"
+  private I_LOAD      = "08"
+  private I_LITERAL   = "09"
+  private I_CALL      = "10"
+  private I_STOREADD  = "11"
+  private I_STORESUB  = "12"
+  private I_STOREMUL  = "13"
+  private I_STOREDIV  = "14"
+  private I_STOREAND  = "15"
+  private I_STOREOR   = "16"
+  private I_STOREXOR  = "17"
+  private I_STOREMOD  = "18"
+  private I_POPMOD    = "19"
+  private I_POPSHL    = "20"
+  private I_POPSHR    = "21"
+  private I_POPLAND   = "22"
+  private I_POPLOR    = "23"
+  private I_PUSHPAR   = "24"
+  private I_JNE       = "25"
+  private I_JE        = "26"
+  private I_JMP       = "27"
+  private I_TEMP      = "28"
+  private I_CMPNE     = "29"
+  private I_PLPL      = "30"
+  private I_PLMO      = "31"
+  private I_MIMI      = "32"
+  private I_MIMO      = "33"
+  private I_PREPLPL   = "34"
+  private I_PREMIMI   = "35"
+  private I_PREPLMO   = "36"
+  private I_PREMIMO   = "37"
+  private I_ZERO      = "38"
+//  private I_PTRMUL    = "39"
+  private I_NOT       = "39"
+  private I_POPAND    = "40"
+  private I_POPOR     = "41"
+  private I_POPXOR    = "42"
+
+
+
+
+
+ //Vergleiche (Akku wird 0 oder 1) ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒØ
+  private I_POPEQ     = "58"
+  private I_POPNE     = "59"
+  private I_POPGE     = "60"
+  private I_POPLE     = "61"
+  private I_POPGG     = "62"
+  private I_POPLL     = "63"
+
+  private T_BYTE      = "64"
+  private T_WORD      = "65"
+  private T_DWORD     = "66"
+  private T_FLOAT     = "67"
+  private T_REAL      = "68"
+
+  private T_LOADP     = "69"
+
+  private I_STORP     = "70"
+
+
+
+  //Weiteren Container an Codes-Liste anfÅgen
+  append(0,128*16,0,g[Codes],@a) a=a+24 blast(a,128*16*4,0)
+
+  a[I_NEG    *64 + I_BYTE]  = '%t4neg al%n'
+  a[I_NEG    *64 + I_WORD]  = '%t4neg ax%n'
+  a[I_NEG    *64 + I_DWORD] = '%t4neg eax%n'
+  a[I_NEG    *64 + I_FLOAT] = '%t4fchs%n'
+  a[I_NEG    *64 + I_REAL]  = '%t4fchs%n'
+
+  a[I_PUSH   *64 + I_BYTE]  = '%t4push ax%n'
+  a[I_PUSH   *64 + I_WORD]  = '%t4push ax%n'
+  a[I_PUSH   *64 + I_DWORD] = '%t4push eax%n'
+  a[I_PUSH   *64 + I_FLOAT] = 0
+  a[I_PUSH   *64 + I_REAL]  = 0
+
+  a[I_POPADD *64 + I_BYTE]  = '%t4mov dl,al%n%t4pop ax%n%t4add al,dl%n'
+  a[I_POPADD *64 + I_WORD]  = '%t4mov dx,ax%n%t4pop ax%n%t4add ax,dx%n'
+  a[I_POPADD *64 + I_DWORD] = '%t4mov edx,eax%n%t4pop eax%n%t4add eax,edx%n'
+  a[I_POPADD *64 + I_FLOAT] = '%t4faddp%n'
+  a[I_POPADD *64 + I_REAL]  = '%t4faddp%n'
+
+  a[I_POPSUB *64 + I_BYTE]  = '%t4mov dl,al%n%t4pop ax%n%t4sub al,dl%n'
+  a[I_POPSUB *64 + I_WORD]  = '%t4mov dx,ax%n%t4pop ax%n%t4sub ax,dx%n'
+  a[I_POPSUB *64 + I_DWORD] = '%t4mov edx,eax%n%t4pop eax%n%t4sub eax,edx%n'
+  a[I_POPSUB *64 + I_FLOAT] = '%t4fsubp%n%t4fchs%n'
+  a[I_POPSUB *64 + I_REAL]  = '%t4fsubp%n%t4fchs%n'
+
+  a[I_POPMUL *64 + I_BYTE]  = '%t4pop dx%n%t4imul dl%n'
+  a[I_POPMUL *64 + I_WORD]  = '%t4pop dx%n%t4movsx eax,ax%n%t4movsx edx,dx%n%t4imul edx%n'
+  a[I_POPMUL *64 + I_DWORD] = '%t4pop edx%n%t4imul edx%n'
+  a[I_POPMUL *64 + I_FLOAT] = '%t4fmulp%n'
+  a[I_POPMUL *64 + I_REAL]  = '%t4fmulp%n'
+
+  a[I_POPDIV *64 + I_BYTE]  = '%t4mov cl,al%n%t4pop ax%n%t4cbw%n%t4idiv cl%n'
+  a[I_POPDIV *64 + I_WORD]  = '%t4mov cx,ax%n%t4pop ax%n%t4cwd%n%t4idiv cx%n'
+  a[I_POPDIV *64 + I_DWORD] = '%t4mov ecx,eax%n%t4pop eax%n%t4cdq%n%t4idiv ecx%n'
+  a[I_POPDIV *64 + I_FLOAT] = '%t4fdivp%n'
+  a[I_POPDIV *64 + I_REAL]  = '%t4fdivp%n'
+
+  a[I_POPPOT *64 + I_BYTE]  = '%t4pop dx%n%t4call mathpot%n'
+  a[I_POPPOT *64 + I_WORD]  = '%t4pop dx%n%t4call mathpot%n'
+  a[I_POPPOT *64 + I_DWORD] = '%t4pop edx%n%t4call mathpot%n'
+  a[I_POPPOT *64 + I_FLOAT] = '%t4fdivp%n'
+  a[I_POPPOT *64 + I_REAL]  = '%t4fdivp%n'
+
+  a[I_STORE  *64 + I_BYTE]  = '%t4mov %s,al%n'
+  a[I_STORE  *64 + I_WORD]  = '%t4mov %s,ax%n'
+  a[I_STORE  *64 + I_DWORD] = '%t4mov %s,eax%n'
+  a[I_STORE  *64 + I_FLOAT] = '%t4fstp dword ptr %s%n'
+  a[I_STORE  *64 + I_REAL]  = '%t4fstp qword ptr %s%n'
+
+  a[I_LOAD   *64 + I_BYTE]  = '%t4mov al,%s%n'
+  a[I_LOAD   *64 + I_WORD]  = '%t4mov ax,%s%n'
+  a[I_LOAD   *64 + I_DWORD] = '%t4mov eax,%s%n'
+  a[I_LOAD   *64 + I_FLOAT] = '%t4fld dword ptr %s%n'
+  a[I_LOAD   *64 + I_REAL]  = '%t4fld qword ptr %s%n'
+
+  a[I_LITERAL*64 + I_BYTE]  = '%t4mov al,%s%n'
+  a[I_LITERAL*64 + I_WORD]  = '%t4mov ax,%s%n'
+  a[I_LITERAL*64 + I_DWORD] = '%t4mov eax,%s%n'
+  a[I_LITERAL*64 + I_FLOAT] = '%t4mov Temp,%s%n%t4fld dword ptr Temp%n'
+  a[I_LITERAL*64 + I_REAL]  = '%t4mov Temp,%s%n%t4fld qword ptr Temp%n'
+
+  a[I_CALL   *64 + I_BYTE]  = '%t4call %s%n'
+  a[I_CALL   *64 + I_WORD]  = '%t4call %s%n'
+  a[I_CALL   *64 + I_DWORD] = '%t4call %s%n'
+  a[I_CALL   *64 + I_FLOAT] = '%t4call %s%n'
+  a[I_CALL   *64 + I_REAL]  = '%t4call %s%n'
+
+  a[I_STOREADD  *64 + I_BYTE]  = '%t4add %s,al%n'
+  a[I_STOREADD  *64 + I_WORD]  = '%t4add %s,ax%n'
+  a[I_STOREADD  *64 + I_DWORD] = '%t4add %s,eax%n'
+  a[I_STOREADD  *64 + I_FLOAT] = 0
+  a[I_STOREADD  *64 + I_REAL]  = 0
+
+  a[I_STORESUB  *64 + I_BYTE]  = '%t4sub %s,al%n'
+  a[I_STORESUB  *64 + I_WORD]  = '%t4sub %s,ax%n'
+  a[I_STORESUB  *64 + I_DWORD] = '%t4sub %s,eax%n'
+  a[I_STORESUB  *64 + I_FLOAT] = 0
+  a[I_STORESUB  *64 + I_REAL]  = 0
+
+  a[I_STOREMUL  *64 + I_BYTE]  = '%t4mov dl,%s%n%t4imul dl%n%t4mov %s,al%n'
+  a[I_STOREMUL  *64 + I_WORD]  = '%t4mov dx,%s%n%t4imul dx%n%t4mov %s,ax%n'
+  a[I_STOREMUL  *64 + I_DWORD] = '%t4mov edx,%s%n%t4imul edx%n%t4mov %s,eax%n'
+  a[I_STOREMUL  *64 + I_FLOAT] = 0
+  a[I_STOREMUL  *64 + I_REAL]  = 0
+
+  a[I_STOREDIV  *64 + I_BYTE]  = '%t4mov cl,al%n%t4mov al,%s%n%t4cbw%n%t4idiv cl%n%t4mov %s,al%n'
+  a[I_STOREDIV  *64 + I_WORD]  = '%t4mov cx,ax%n%t4mov ax,%s%n%t4cwd%n%t4idiv cx%n%t4mov %s,ax%n'
+  a[I_STOREDIV  *64 + I_DWORD] = '%t4mov ecx,eax%n%t4mov eax,%s%n%t4cdq%n%t4idiv ecx%n%t4mov %s,eax%n'
+  a[I_STOREDIV  *64 + I_FLOAT] = 0
+  a[I_STOREDIV  *64 + I_REAL]  = 0
+
+  a[I_STOREAND  *64 + I_BYTE]  = '%t4and %s,al%n'
+  a[I_STOREAND  *64 + I_WORD]  = '%t4and %s,ax%n'
+  a[I_STOREAND  *64 + I_DWORD] = '%t4and %s,eax%n'
+  a[I_STOREAND  *64 + I_FLOAT] = 0
+  a[I_STOREAND  *64 + I_REAL]  = 0
+
+  a[I_STOREOR   *64 + I_BYTE]  = '%t4or %s,al%n'
+  a[I_STOREOR   *64 + I_WORD]  = '%t4or %s,ax%n'
+  a[I_STOREOR   *64 + I_DWORD] = '%t4or %s,eax%n'
+  a[I_STOREOR   *64 + I_FLOAT] = 0
+  a[I_STOREOR   *64 + I_REAL]  = 0
+
+  a[I_STOREXOR  *64 + I_BYTE]  = '%t4xor %s,al%n'
+  a[I_STOREXOR  *64 + I_WORD]  = '%t4xor %s,ax%n'
+  a[I_STOREXOR  *64 + I_DWORD] = '%t4xor %s,eax%n'
+  a[I_STOREXOR  *64 + I_FLOAT] = 0
+  a[I_STOREXOR  *64 + I_REAL]  = 0
+
+  a[I_STOREMOD  *64 + I_BYTE]  = '%t4mov cl,al%n%t4mov al,%s%n%t4cbw%n%t4idiv cl%n%t4mov %s,al%n'
+  a[I_STOREMOD  *64 + I_WORD]  = '%t4mov cx,ax%n%t4mov ax,%s%n%t4cwd%n%t4idiv cx%n%t4mov %s,ax%n'
+  a[I_STOREMOD  *64 + I_DWORD] = '%t4mov ecx,eax%n%t4mov eax,%s%n%t4cdq%n%t4idiv ecx%n%t4mov %s,eax%n'
+  a[I_STOREMOD  *64 + I_FLOAT] = 0
+  a[I_STOREMOD  *64 + I_REAL]  = 0
+
+  a[I_POPMOD *64 + I_BYTE]  = '%t4mov cl,al%n%t4pop ax%n%t4cbw%n%t4idiv cl%n%t4mov al,ah%n'
+  a[I_POPMOD *64 + I_WORD]  = '%t4mov cx,ax%n%t4pop ax%n%t4cwd%n%t4idiv cx%n%t4mov ax,dx%n'
+  a[I_POPMOD *64 + I_DWORD] = '%t4mov ecx,eax%n%t4pop eax%n%t4cdq%n%t4idiv ecx%n%t4mov eax,edx%n'
+  a[I_POPMOD *64 + I_FLOAT] = 0
+  a[I_POPMOD *64 + I_REAL]  = 0
+
+  a[I_POPSHL *64 + I_BYTE]  = '%t4mov cl,al%n%t4pop ax%n%t4shl al,cl%n'
+  a[I_POPSHL *64 + I_WORD]  = '%t4mov cl,al%n%t4pop ax%n%t4shl ax,cl%n'
+  a[I_POPSHL *64 + I_DWORD] = '%t4mov cl,al%n%t4pop eax%n%t4shl eax,cl%n'
+  a[I_POPSHL *64 + I_FLOAT] = 0
+  a[I_POPSHL *64 + I_REAL]  = 0
+
+  a[I_POPSHR *64 + I_BYTE]  = '%t4mov cl,al%n%t4pop ax%n%t4shr al,cl%n'
+  a[I_POPSHR *64 + I_WORD]  = '%t4mov cl,al%n%t4pop ax%n%t4shr ax,cl%n'
+  a[I_POPSHR *64 + I_DWORD] = '%t4mov cl,al%n%t4pop eax%n%t4shr eax,cl%n'
+  a[I_POPSHR *64 + I_FLOAT] = 0
+  a[I_POPSHR *64 + I_REAL]  = 0
+
+  a[I_POPLAND *64 + I_BYTE]  = '%t4pop dx%n%t4and al,dl%n%t4setne al%n'
+  a[I_POPLAND *64 + I_WORD]  = '%t4pop dx%n%t4and ax,dx%n%t4setne al%n'
+  a[I_POPLAND *64 + I_DWORD] = '%t4pop edx%n%t4and eax,edx%n%t4setne al%n'
+  a[I_POPLAND *64 + I_FLOAT] = 0
+  a[I_POPLAND *64 + I_REAL]  = 0
+
+  a[I_POPLOR  *64 + I_BYTE]  = '%t4pop dx%n%t4or al,dl%n%t4setne al%n'
+  a[I_POPLOR  *64 + I_WORD]  = '%t4pop dx%n%t4or ax,dx%n%t4setne al%n'
+  a[I_POPLOR  *64 + I_DWORD] = '%t4pop edx%n%t4or eax,edx%n%t4setne al%n'
+  a[I_POPLOR  *64 + I_FLOAT] = 0
+  a[I_POPLOR  *64 + I_REAL]  = 0
+
+  a[I_PUSHPAR *64 + I_BYTE]  = '%t4push ax%n'
+  a[I_PUSHPAR *64 + I_WORD]  = '%t4push ax%n'
+  a[I_PUSHPAR *64 + I_DWORD] = '%t4push eax%n'
+  a[I_PUSHPAR *64 + I_FLOAT] = 0
+  a[I_PUSHPAR *64 + I_REAL]  = 0
+
+  a[I_JNE     *64 + I_BYTE]  = '%t4test al,al%n%t4jne %s%n'
+  a[I_JNE     *64 + I_WORD]  = '%t4test al,al%n%t4jne %s%n'
+  a[I_JNE     *64 + I_DWORD] = '%t4test al,al%n%t4jne %s%n'
+  a[I_JNE     *64 + I_FLOAT] = 0
+  a[I_JNE     *64 + I_REAL]  = 0
+
+  a[I_JE      *64 + I_BYTE]  = '%t4test al,al%n%t4je %s%n'
+  a[I_JE      *64 + I_WORD]  = '%t4test al,al%n%t4je %s%n'
+  a[I_JE      *64 + I_DWORD] = '%t4test al,al%n%t4je %s%n'
+  a[I_JE      *64 + I_FLOAT] = 0
+  a[I_JE      *64 + I_REAL]  = 0
+
+  a[I_JMP     *64 + I_BYTE]  = '%t4jmp %s%n'
+  a[I_JMP     *64 + I_WORD]  = '%t4jmp %s%n'
+  a[I_JMP     *64 + I_DWORD] = '%t4jmp %s%n'
+  a[I_JMP     *64 + I_FLOAT] = '%t4jmp %s%n'
+  a[I_JMP     *64 + I_REAL]  = '%t4jmp %s%n'
+
+  a[I_TEMP    *64 + I_BYTE]  = '%t4mov [Temp],al%n'
+  a[I_TEMP    *64 + I_WORD]  = '%t4mov [Temp],ax%n'
+  a[I_TEMP    *64 + I_DWORD] = '%t4mov [Temp],eax%n'
+  a[I_TEMP    *64 + I_FLOAT] = 0
+  a[I_TEMP    *64 + I_REAL]  = 0
+
+  a[I_CMPNE    *64 + I_BYTE]  = '%t4cmp al,%s%n%t4jne %s%n'
+  a[I_CMPNE    *64 + I_WORD]  = '%t4cmp ax,%s%n%t4jne %s%n'
+  a[I_CMPNE    *64 + I_DWORD] = '%t4cmp eax,%s%n%t4jne %s%n'
+  a[I_CMPNE    *64 + I_FLOAT] = 0
+  a[I_CMPNE    *64 + I_REAL]  = 0
+
+  a[I_PLPL     *64 + I_BYTE]  = '%t4add %s,%da    %n'
+  a[I_PLPL     *64 + I_WORD]  = '%t4add %s,%da    %n'
+  a[I_PLPL     *64 + I_DWORD] = '%t4add %s,%da    %n'
+  a[I_PLPL     *64 + I_FLOAT] = 0
+  a[I_PLPL     *64 + I_REAL]  = 0
+
+  a[I_PLMO     *64 + I_BYTE]  = '%t4add %s,%da    %n'
+  a[I_PLMO     *64 + I_WORD]  = '%t4add %s,%da    %n'
+  a[I_PLMO     *64 + I_DWORD] = '%t4add %s,%da    %n'
+  a[I_PLMO     *64 + I_FLOAT] = 0
+  a[I_PLMO     *64 + I_REAL]  = 0
+
+  a[I_MIMI     *64 + I_BYTE]  = '%t4dec %s%n'
+  a[I_MIMI     *64 + I_WORD]  = '%t4dec %s%n'
+  a[I_MIMI     *64 + I_DWORD] = '%t4dec %s%n'
+  a[I_MIMI     *64 + I_FLOAT] = 0
+  a[I_MIMI     *64 + I_REAL]  = 0
+
+  a[I_MIMO     *64 + I_BYTE]  = '%t4sub %s,%da    %n'
+  a[I_MIMO     *64 + I_WORD]  = '%t4sub %s,%da    %n'
+  a[I_MIMO     *64 + I_DWORD] = '%t4sub %s,%da    %n'
+  a[I_MIMO     *64 + I_FLOAT] = 0
+  a[I_MIMO     *64 + I_REAL]  = 0
+
+  a[I_PREPLPL  *64 + I_BYTE]  = '%t4mov al,%s%n%t4inc al%n%t4mov %s,al%n'
+  a[I_PREPLPL  *64 + I_WORD]  = '%t4mov ax,%s%n%t4inc ax%n%t4mov %s,ax%n'
+  a[I_PREPLPL  *64 + I_DWORD] = '%t4mov eax,%s%n%t4inc eax%n%t4mov %s,eax%n'
+  a[I_PREPLPL  *64 + I_FLOAT] = 0
+  a[I_PREPLPL  *64 + I_REAL]  = 0
+
+  a[I_PREPLMO  *64 + I_BYTE]  = '%t4mov al,%s%n%t4add al,%da%n%t4mov %s,al%n'
+  a[I_PREPLMO  *64 + I_WORD]  = '%t4mov ax,%s%n%t4add ax,%da%n%t4mov %s,ax%n'
+  a[I_PREPLMO  *64 + I_DWORD] = '%t4mov eax,%s%n%t4add eax,%da%n%t4mov %s,eax%n'
+  a[I_PREPLMO  *64 + I_FLOAT] = 0
+  a[I_PREPLMO  *64 + I_REAL]  = 0
+
+  a[I_PREMIMI  *64 + I_BYTE]  = '%t4mov al,%s%n%t4dec al%n%t4mov %s,al%n'
+  a[I_PREMIMI  *64 + I_WORD]  = '%t4mov ax,%s%n%t4dec ax%n%t4mov %s,ax%n'
+  a[I_PREMIMI  *64 + I_DWORD] = '%t4mov eax,%s%n%t4dec eax%n%t4mov %s,eax%n'
+  a[I_PREMIMI  *64 + I_FLOAT] = 0
+  a[I_PREMIMI  *64 + I_REAL]  = 0
+
+  a[I_PREMIMO  *64 + I_BYTE]  = '%t4mov al,%s%n%t4sub al,%da%n%t4mov %s,al%n'
+  a[I_PREMIMO  *64 + I_WORD]  = '%t4mov ax,%s%n%t4sub ax,%da%n%t4mov %s,ax%n'
+  a[I_PREMIMO  *64 + I_DWORD] = '%t4mov eax,%s%n%t4sub eax,%da%n%t4mov %s,eax%n'
+  a[I_PREMIMO  *64 + I_FLOAT] = 0
+  a[I_PREMIMO  *64 + I_REAL]  = 0
+
+  a[I_ZERO     *64 + I_BYTE]  = '%t4xor eax,eax%n'
+  a[I_ZERO     *64 + I_WORD]  = '%t4xor eax,eax%n'
+  a[I_ZERO     *64 + I_DWORD] = '%t4xor eax,eax%n'
+  a[I_ZERO     *64 + I_FLOAT] = '%t4fldz%n'
+  a[I_ZERO     *64 + I_REAL]  = '%t4fldz%n'
+
+  a[I_NOT      *64 + I_BYTE]  = '%t4not al%n'
+  a[I_NOT      *64 + I_WORD]  = '%t4not ax%n'
+  a[I_NOT      *64 + I_DWORD] = '%t4not eax%n'
+  a[I_NOT      *64 + I_FLOAT] = 0
+  a[I_NOT      *64 + I_REAL]  = 0
+
+
+  a[I_POPAND *64 + I_BYTE]  = '%t4mov dl,al%n%t4pop ax%n%t4and al,dl%n'
+  a[I_POPAND *64 + I_WORD]  = '%t4mov dx,ax%n%t4pop ax%n%t4and ax,dx%n'
+  a[I_POPAND *64 + I_DWORD] = '%t4mov edx,eax%n%t4pop eax%n%t4and eax,edx%n'
+  a[I_POPAND *64 + I_FLOAT] = 0
+  a[I_POPAND *64 + I_REAL]  = 0
+
+  a[I_POPOR  *64 + I_BYTE]  = '%t4mov dl,al%n%t4pop ax%n%t4or al,dl%n'
+  a[I_POPOR  *64 + I_WORD]  = '%t4mov dx,ax%n%t4pop ax%n%t4or ax,dx%n'
+  a[I_POPOR  *64 + I_DWORD] = '%t4mov edx,eax%n%t4pop eax%n%t4or eax,edx%n'
+  a[I_POPOR  *64 + I_FLOAT] = 0
+  a[I_POPOR  *64 + I_REAL]  = 0
+
+  a[I_POPXOR *64 + I_BYTE]  = '%t4mov dl,al%n%t4pop ax%n%t4xor al,dl%n'
+  a[I_POPXOR *64 + I_WORD]  = '%t4mov dx,ax%n%t4pop ax%n%t4xor ax,dx%n'
+  a[I_POPXOR *64 + I_DWORD] = '%t4mov edx,eax%n%t4pop eax%n%t4xor eax,edx%n'
+  a[I_POPXOR *64 + I_FLOAT] = 0
+  a[I_POPXOR *64 + I_REAL]  = 0
+
+
+
+
+
+  //Testoperationen mit Akku = 0 oder 1
+  a[I_POPEQ  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp al,dl%n%t4sete al%n'
+  a[I_POPEQ  *64 + I_WORD]  = '%t4pop dx%n%t4cmp ax,dx%n%t4sete al%n'
+  a[I_POPEQ  *64 + I_DWORD] = '%t4pop edx%n%t4cmp eax,edx%n%t4sete al%n'
+  a[I_POPEQ  *64 + I_FLOAT] = 0
+  a[I_POPEQ  *64 + I_REAL]  = 0
+
+  a[I_POPNE  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp al,dl%n%t4setne al%n'
+  a[I_POPNE  *64 + I_WORD]  = '%t4pop dx%n%t4cmp ax,dx%n%t4setne al%n'
+  a[I_POPNE  *64 + I_DWORD] = '%t4pop edx%n%t4cmp eax,edx%n%t4setne al%n'
+  a[I_POPNE  *64 + I_FLOAT] = 0
+  a[I_POPNE  *64 + I_REAL]  = 0
+
+  a[I_POPGE  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp dl,al%n%t4setge al%n'
+  a[I_POPGE  *64 + I_WORD]  = '%t4pop dx%n%t4cmp dx,ax%n%t4setge al%n'
+  a[I_POPGE  *64 + I_DWORD] = '%t4pop edx%n%t4cmp edx,eax%n%t4setge al%n'
+  a[I_POPGE  *64 + I_FLOAT] = 0
+  a[I_POPGE  *64 + I_REAL]  = 0
+
+  a[I_POPLE  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp dl,al%n%t4setle al%n'
+  a[I_POPLE  *64 + I_WORD]  = '%t4pop dx%n%t4cmp dx,ax%n%t4setle al%n'
+  a[I_POPLE  *64 + I_DWORD] = '%t4pop edx%n%t4cmp edx,eax%n%t4setle al%n'
+  a[I_POPLE  *64 + I_FLOAT] = 0
+  a[I_POPLE  *64 + I_REAL]  = 0
+
+  a[I_POPGG  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp dl,al%n%t4setg al%n'
+  a[I_POPGG  *64 + I_WORD]  = '%t4pop dx%n%t4cmp dx,ax%n%t4setg al%n'
+  a[I_POPGG  *64 + I_DWORD] = '%t4pop edx%n%t4cmp edx,eax%n%t4setg al%n'
+  a[I_POPGG  *64 + I_FLOAT] = 0
+  a[I_POPGG  *64 + I_REAL]  = 0
+
+  a[I_POPLL  *64 + I_BYTE]  = '%t4pop dx%n%t4cmp dl,al%n%t4setl al%n'
+  a[I_POPLL  *64 + I_WORD]  = '%t4pop dx%n%t4cmp dx,ax%n%t4setl al%n'
+  a[I_POPLL  *64 + I_DWORD] = '%t4pop edx%n%t4cmp edx,eax%n%t4setl al%n'
+  a[I_POPLL  *64 + I_FLOAT] = 0
+  a[I_POPLL  *64 + I_REAL]  = 0
+
+
+
+
+
+
+
+
+  //TYPENUMWANDLUNGEN =====================================================
+  a[T_BYTE   *64 + I_BYTE]  = 0
+  a[T_BYTE   *64 + I_WORD]  = 0
+  a[T_BYTE   *64 + I_DWORD] = 0
+  a[T_BYTE   *64 + I_FLOAT] = '%t4fistp dword ptr Temp%s%t4mov al,byte ptr Temp%n'
+  a[T_BYTE   *64 + I_REAL]  = '%t4fistp dword ptr Temp%s%t4mov al,byte ptr Temp%n'
+
+  a[T_WORD   *64 + I_BYTE]  = '%t4xor ah,ah%n'
+  a[T_WORD   *64 + I_WORD]  = 0
+  a[T_WORD   *64 + I_DWORD] = 0
+  a[T_WORD   *64 + I_FLOAT] = '%t4fistp dword ptr Temp%s%t4mov ax,word ptr Temp%n'
+  a[T_WORD   *64 + I_REAL]  = '%t4fistp dword ptr Temp%s%t4mov ax,word ptr Temp%n'
+
+//  a[T_DWORD  *64 + I_BYTE]  = '%t4and eax,0xff%n'
+  a[T_DWORD  *64 + I_BYTE]  = '%t4movzx eax,al%n'
+  a[T_DWORD  *64 + I_WORD]  = '%t4movsx eax,ax%n'
+  a[T_DWORD  *64 + I_DWORD] = 0
+  a[T_DWORD  *64 + I_FLOAT] = '%t4fistp dword ptr Temp%s%t4mov eax,dword ptr Temp%n'
+  a[T_DWORD  *64 + I_REAL]  = '%t4fistp dword ptr Temp%s%t4mov eax,dword ptr Temp%n'
+
+  a[T_FLOAT  *64 + I_BYTE]  = '%t4and eax,0xff%n%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_FLOAT  *64 + I_WORD]  = '%t4and eax,0xffff%n%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_FLOAT  *64 + I_DWORD] = '%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_FLOAT  *64 + I_FLOAT] = 0
+  a[T_FLOAT  *64 + I_REAL]  = 0
+
+  a[T_REAL   *64 + I_BYTE]  = '%t4and eax,0xff%n%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_REAL   *64 + I_WORD]  = '%t4and eax,0xffff%n%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_REAL   *64 + I_DWORD] = '%t4mov dword ptr Temp,eax%n%t4fild dword ptr Temp%n'
+  a[T_REAL   *64 + I_FLOAT] = 0
+  a[T_REAL   *64 + I_REAL]  = 0
+
+
+
+  a[I_STORP  *64 + I_BYTE]  = '%t4mov *%s,al%n'
+  a[I_STORP  *64 + I_WORD]  = '%t4mov *%s,ax%n'
+  a[I_STORP  *64 + I_DWORD] = '%t4mov *%s,eax%n'
+  a[I_STORP  *64 + I_FLOAT] = '%t4fstp dword ptr *%s%n'
+  a[I_STORP  *64 + I_REAL]  = '%t4fstp qword ptr *%s%n'
+
+
+
+  //Strings umwandeln, da eingebettete Quelltextvariablen gleich wieder verschwinden.
+  stack(100)
+  i=128*16
+  j=a
+  while(i)
+  {
+    if(j[0]) strcpy(j[0],j)
+    j=j+4 i=i-1
+  }
+
+//Ende IA387.CPC

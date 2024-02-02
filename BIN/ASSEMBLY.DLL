@@ -1,0 +1,2354 @@
+/***************************************************************************
+ * ASSEMBLY.DLL, Assembler 1.0
+ * Date: 2. M„rz 2016
+ * Author: Alexander Graf
+ *
+ * Register H enth„lt 12 Bytes mit Fehler, Zeile und Quelldatei
+ * fr etwaige Rckgaben an den Aufrufer bereit.
+ *
+ * Erwartet: f=Quelldatei
+ *           p=Quellpfad
+ *           r=Ausfhrungspfad
+ *           o=Zielpfad
+ *           s=Datei-Endung der Zieldatei
+ *           t=Plattformspezifikationsdatei (z.B. 'IA386.INI')
+ *           h=Returnpointer fr Ergebnis/Fehlernummer
+ */
+
+
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                  ASSEMBLER ZUSAMMENFASSUNG                   ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³ - Am h„ufigsten aufgerufen ist SkipSpaces, wobei dann auch   ³
+       ³   Crlf mit bersprungen werden.                              ³
+       ³                                                              ³
+       ³ - Kommentare sind entweder einzeilig oder mehrzeilig         ³
+       ³                                                              ³
+       ³ - Es werden Basisdatentypen festgelegt, z.B. Byte, Word.     ³
+       ³                                                              ³
+       ³ - Strukturen werden aus Basisdatentypen oder Strukturen      ³
+       ³   zusammengesetzt.                                           ³
+       ³                                                              ³
+       ³ - Variablen werden mit Datentyp und Namen registriert und    ³
+       ³   koennen als Zeiger definiert werden.                       ³
+       ³                                                              ³
+       ³ - Beim Zugriff auf eine Variable wird anhand des Typs und    ³
+       ³   anhand der anderen Strukturmember der Offset bestimmt.     ³
+       ³                                                              ³
+       ³ - Bei Funktionen ist nur der Name wichtig, da es keine       ³
+       ³   Pascalaufrufe gibt, sondern sie vom Compiler stackbasiert  ³
+       ³   mit PUSH-Befehlen aufgebaut werden, wobei zwischendurch    ³
+       ³   noch inline-Parameterberechnungen stattfinden drfen.      ³
+       ³                                                              ³
+       ³ - Der Heap des Programms wird per Stack immer weitergesetzt  ³
+       ³   oder zurckgesetzt, je nach Lokalit„t der Variablen, um    ³
+       ³   die konkreten Adressen ausrechnen zu k”nnen.               ³
+       ³                                                              ³
+       ³ - Der eigentliche Assembler sucht nach Assemblerzeilen und   ³
+       ³   setzt die entsprechenden Bin„rcodes in den Zielpuffer.     ³
+       ³   Tauchen Variablen in dem Befehl auf, werden anhand des     ³
+       ³   Typs und anhand der anderen Strukturmember der Offset      ³
+       ³   aufaddiert.                                                ³
+       ³                                                              ³
+       ³ Die Schwierigkeit liegt im Umgang mit Pointern. Der Heap     ³
+       ³ wird durch ESI beschrieben. Der Pointerverlauf soll nun      ³
+       ³ durch EDI, EBP und EBX laufen, so dass 3 verschiedene        ³
+       ³ Strukturen/Variablen gleichzeitig behandelt werden, ohne     ³
+       ³ 'Redundante Loads'.                                          ³
+       ³ Der Assembler soll einen internen Counter benutzen, um       ³
+       ³ festzulegen, welches Register zum Zugriff benutzt wird.      ³
+       ³ Um zu beginnen, kann ich auch erstmal nur EDI benutzen und   ³
+       ³ damit den LOAD/STORE machen.  ³
+       ³   ³
+       ³   ³
+       ³   ³
+       ³   ³
+       ³                                                              ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+
+  stack(100)
+  DX_AllocateGame(0,0,100000) g=a
+
+
+//Plattformdatei laden ######################################
+  private InsetWidth    = "24"
+  private InsetNumbytes = "28"
+  private InsetByteA    = "32"
+  private InsetByteB    = "36"
+  private InsetByteC    = "40"
+  private InsetByteD    = "44"
+  private InsetByteE    = "48"
+  private InsetByteF    = "52"
+  private InsetByteG    = "56"
+
+
+
+
+  long Instructions;
+
+  getmem(a,24) a[0]=0 a[8]=a Instructions=a
+
+  cd(ProgPath,'PLATFORM')
+  call('IA387.APC') l=Instructions
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                       TYPEN-DEFINITION                       ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                                              ³
+       ³ Diese Liste fasst alle Datentypen zusammen. Vom Byte, ueber  ³
+       ³ Word und Dword zu Strukturen und deren Membern, die ebenfalls³
+       ³ Strukturen sein k”nnen.                                      ³
+       ³                                                              ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+  public TypName     = "04"    //Namensstring im Regfeld
+  public TypSize     = "8024"  //Daten/Strukturbreite
+  public TypID       = "8028"  //ID zur Erkennung von Funktionen
+  public TypMask     = "8032"  //Bitmaske (fr einfache typedefs)
+  public TypBits     = "8036"  //Bitposition (fr einfache typedefs)
+  public TypFunc     = "3"     //ID fr Funktionen in der Typliste
+  public TypVar      = "2"     //ID fr Variablen in der Typliste
+  public TypStrukt   = "1"     //ID fr Strukturen in der Typliste
+
+//Strukturen innerhalb der Typedef ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  public TypMembers  = "20"    //Anzahl Offset/Namen-Paare
+  public TypMName    = "24"    //Offset des Membernamens
+  public TypMTyp     = "4024"  //Offset des Membertypen(-pointer)
+
+//Struktur fr Variablen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  public VarName          = "04"    //Name im Regfeld
+  public VarType          = "24"    //Zeiger auf Typ-Container
+  public VarDeRefCnt      = "28"    //Maximal erlaubte Anzahl der Dereferenzierungen des Zeigers (min. 1 bei Zeigern)
+  public VarHeap          = "32"    //Position im Heap
+  public VarInternational = "36"    //Externe Variable ?
+  public VarAccessCnt     = "40"    //Anzahl Zugriffe in dieser Datei
+  public VarAccessOfs     = "44"    //Hier beginnen die (bin-)relativen Offsets der Patchlabels innerhalb dieser Datei
+  public VarVariable      = "02"    //'                 .normale Variable'
+  public VarStruct        = "04"    //'                 .Struktur'
+
+
+//Allgemeine Konstanten ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private PtrSiz     = "4"
+
+
+//Struktur fr Lokales ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private ParName    = "04"
+  private ParType    = "24"
+  private ParOfs     = "28"
+  private ParRel     = "32"
+  private ParPtrFlag = "36"
+
+
+  long Typedef,Labels,Jumps,DLLs,Variables,HeapPos,Params,ParaSize,ParamFlag,Locals,LocalFlag,LocalPos,LocalPatch,Constants,ConstCount;
+  long AString;
+  long FilePos,Ziel;
+  long Quelle,Ziel,Filename,FileRoot;
+  long Relocations,IsFar,DLLCount;
+  long Internationals,IsInternational,International;
+  long IsPublic;
+
+  long Outputbuffer,Outputbufferpos;
+
+
+  offset WordList;
+  long WordA,WordB,WordC,WordD,WordE,LineA;
+
+  getmem(a,1000000) Outputbuffer = a Outputbufferpos = 0
+
+  getmem(a,1000) WordA=a
+  getmem(a,1000) WordB=a
+  getmem(a,1000) WordC=a
+  getmem(a,1000) WordD=a
+  getmem(a,1000) WordE=a
+  getmem(a,1000) LineA=a
+
+  getmem(a,1000000) AString=a a[0]=0
+  getmem(a,1000000) Ziel=a a[0]=0
+
+  getmem(a,24) Typedef=a     a[0]=0 a[8]=a
+  getmem(a,24) Labels=a      a[0]=0 a[8]=a
+  getmem(a,24) Jumps=a       a[0]=0 a[8]=a
+  getmem(a,24) Variables=a   a[0]=0 a[8]=a
+  getmem(a,24) Params=a      a[0]=0 a[8]=a
+  getmem(a,24) Locals=a      a[0]=0 a[8]=a
+  getmem(a,24) Constants=a   a[0]=0 a[8]=a
+  getmem(a,24) DLLs=a        a[0]=0 a[8]=a
+
+
+  FilePos=0
+  HeapPos=0
+  ParaSize=0
+  Relocations=0
+  Internationals=0
+  IsFar=0
+  IsInternational=0
+  IsPublic=0
+  International=0
+  DLLCount=0
+
+
+
+proc PutOutput(1)
+{
+  pop(a) push(b) b=a[0]
+
+  copy(b+4,Outputbuffer+Outputbufferpos,b[0])
+
+  Outputbufferpos = Outputbufferpos + b[0]
+
+  b=Outputbuffer+Outputbufferpos
+
+  b[0] = wptr 0x0a0d
+
+  Outputbufferpos = Outputbufferpos + 2
+
+  pop(b)
+}
+
+
+
+
+//Count(String) -> A= Anzahl Zeilen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Count(1)
+{
+  pop(a) push(b,c) c=a[0]
+  b=0 a=1
+  while(b<c[0])
+  {
+    if(c[b+4] Integer==0x0a0d) a=a+1 b=b+1
+    b=b+1
+  }
+  pop(c,b)
+}
+
+
+proc Destroy(0)
+{
+  i=Instructions erase(i[0]) free(i)
+  t=Typedef      erase(t[0]) free(t)
+  v=Variables    erase(v[0]) free(v)
+  l=Labels       erase(l[0]) free(l)
+  j=Jumps        erase(j[0]) free(j)
+  j=Params       erase(j[0]) free(j)
+  j=Locals       erase(j[0]) free(j)
+  j=Constants    erase(j[0]) free(j)
+  j=DLLs         erase(j[0]) free(j)
+
+  free(WordA,WordB,WordC,WordD,WordE,LineA)
+//  free(f)
+  free(p)
+  free(Filename)
+  free(FileRoot)
+  free(Quelle)
+  free(Ziel)
+}
+
+
+  long OpBType,OpBHeap,OpBReg,OpCType,OpCHeap,OpCReg;
+
+
+proc Bail(1)
+{
+  pop(a) b=a[0] 
+  q[0]=j
+  Count(q)
+
+  t=a
+  u=b
+  v=LineA
+  w=WordA
+  x=WordB
+  y=OpBType
+  z=OpCType
+  StrMsg('Zeile %da, error %da     ',@t)
+
+  Destroy()
+  exit()
+}
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                     LEERZEICHEN-ROUTINE                      ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                                              ³
+       ³ Ein Switch kann zwischendurch auch zur Schleife werden.      ³
+       ³ So werden Leerzeichen und Crlf ausgelassen, um wieder zu     ³
+       ³ brauchbarem Text zu kommen.                                  ³
+       ³ Sollte zwischendurch das Ende der Datei erreicht sein,       ³
+       ³ wird mit einer Fehlermeldung abgebrochen.                    ³
+       ³                                                              ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc SkipSome(1)
+{
+  pop(a) j=j+a[0]
+  if(j>=q[0]) Bail(13)
+}
+
+
+proc SkipSpaces(0)                                            //
+{                                                             //
+  push(a)
+  while(1)                                                    //Fr alle Zeichen
+  {                                                           //
+    //<End of file>-Fehler testen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(j>=q[0]) Bail(2)
+
+    //Leerzeichen auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Char==32) j=j+1 continue;
+
+    //Crlf auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Integer==0x0a0d) j=j+2 continue;
+    break;                                                    //ansonsten fertig...
+  }                                                           //
+  pop(a)
+}                                                             //
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                        WORT-SCANNEN                          ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                                              ³
+       ³ Alle Zeichen bis zum n„chsten Trennzeichen werden kopiert.   ³
+       ³ Trennzeichen sind: Space,':;,.->' und Crlf. Da Kommentare    ³
+       ³ woanders berechnet werden, sind sie hier nicht von Bedeutung.³
+       ³ Anschliessend werden wieder alle Leerstellen ausgelassen     ³
+       ³ und der String wurde somit neu beschrieben.                  ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc Word(1)
+{
+  pop(a) push(c,i,s) s=a[0] i=0 s[0]=0 SkipSpaces()
+
+//&&(c!=91)&&(c!=93)
+
+  c=q[j+4]Char while(j<q[0])&&(c!=32)&&(c!=58)&&(c!=59)&&(c!=0x0d)&&(c!=0x0a)&&(c!=44)&&(c!=0x2f)&&(c!=40)&&(c!=41)
+  {
+    s[i+4]=bptr c
+    i=i+1
+    j=j+1
+  }
+  s[0]=i pop(s,i,c)
+}
+
+//Find(String[1]) -> A=true/false ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Find(1)
+{
+  pop(a) push(b) b=a[0]                     //Parameterstring, nur 1 Char
+  SkipSpaces()                              //Leerzeichen auslassen
+  if(q[j+4]Char==b[4]Char) j=j+1 a=1        //Zeichen bereinstimmend
+  else a=0                                  //oder A=0..
+  pop(b)
+}
+
+proc Need(1)
+{
+  pop(a) push(b) b=a[0] b=b[4]Char
+  SkipSpaces()
+  if(q[j+4]Char!=b) Bail(10)
+  j=j+1
+  if(j>=q[0]) Bail(11)
+  pop(b)
+}
+
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                 Number(String) -> A=numeric                  ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³ Der String darf dezimale, hex und bin„re Zahlen enthalten.   ³
+       ³ Unterschieden wird durch die 0x/0b als Kennung, z.B. 0xffff  ³
+       ³ oder 0b00010001.                                             ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc Number(1)
+{
+  pop(a) push(b,c,d,e,f) e=a[0] c=e[0] d=0 f=0   //String in E, Multiplikator fr positive Zahlen
+
+  if(e[4]Char==45) f=1 c=c-1 d=d+1
+  if(e[d+4]Char<48)||(e[d+4]Char>57) Bail(12)        //Falls keine Zahl, Syntaxfehler..
+  while(1)                                       //Fr alle M”glichen Formate:
+  {
+    //Hexadezimale Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(e[d+4]Integer==0x7830)&&(c>1)             //Beginnt mit "0x" ? Dann hexadezimal:
+    {                                            //
+      c=c-2 if(c<1)||(c>8) Bail(13)              //Korrekte Anzahl Nibble ?
+      d=d+2 a=0 c=c-1>>2 c=1>>c                  //Welches Nibble als Start ?
+      while(d<e[0])                              //Fr alle Nibble:
+      {                                          //
+        b=e[d+4] Char                            //Nibble aus Quelltext
+        if(b>=48)&&(b<=57)  a=b-48*c|a d=d+1 c=c<<4 continue; //Entweder Digit,
+        if(b>=65)&&(b<=70)  a=b-55*c|a d=d+1 c=c<<4 continue; //groáe Pseudotetraden
+        if(b>=97)&&(b<=102) a=b-87*c|a d=d+1 c=c<<4 continue; //oder kleine halt^^
+        Bail(14)                                 //Evtl. Syntaxfehler...
+      }                                          //
+      if(f) a=-a                                 //(negative Ergebnisse bercksichtigen)
+      break;                                     //Ergebnis in A...
+    }
+    //Bin„re Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(e[d+4] Integer==0x6230)&&(c>1)            //Beginnt mit "0b" ? Dann hexadezimal:
+    {                                            //
+      c=c-2 if(c<1)||(c>32) Bail(15)             //Zwei Zeichen abziehen
+      d=d+2 a=0 c=c-1 c=1>>c                     //Jede Stelle enth„lt nur 1 Bit
+      while(d<e[0])                              //Fr alle Bits:
+      {                                          //
+        b=e[d+4]Char-48 if(b==0)||(b==1) a=b*c+a //Stellenbetrag addieren
+        else Bail(16)                            //(oder Syntaxfehler)
+        d=d+1 c=c<<1                             //N„chste Stelle maskieren
+      }                                          //
+      if(f) a=-a                                 //(negative Ergebnisse bercksichtigen)
+      break;                                     //Ergebnis in A...
+    }
+    //Default: Dezimale Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    a=c-1 c=1                                           //H”chste 10er-Potenz in
+    if(a) c=c*10 a=a-1 repeat                           //einer Schleife vorberechnen
+    a=0                                                 //Beginne bei "0"
+    if(d<e[0]) a=e[d+4] Char-48*c+a d=d+1 c=c/10 repeat //Stellenbetr„ge addieren
+    if(f) a=-a                                          //(negative Ergebnisse bercksichtigen)
+    break;                                              //Ergebnis in A...
+  }
+  pop(f,e,d,c,b)
+}
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                   KOMMENTARE AUSLASSEN                       ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³ Anders, als beim Compiler, bleiben die Kommentare komplett   ³
+       ³ unbeachtet.                                                  ³
+       ³ Alle Leerzeichen und Crlf werden ausgelassen, bevor ein      ³
+       ³ Kommentar erkannt wird. Mehrzeilige Kommentare enden direkt  ³
+       ³ hinter der zweiten Markierung.                               ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc Comment(0)
+{
+  while(j<q[0])
+  {
+    //<End of file>-Fehler testen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(j>=q[0]) Bail(2)
+
+    //Leerzeichen auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Char==32) SkipSome(1) continue;
+
+    //Crlf auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Integer==0x0a0d) SkipSome(2) continue;
+
+    //Einzeilige Kommentare auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Integer==0x2f2f)
+    {
+      if(q[j+4]Integer!=0x0a0d)&&(j<q[0]) j=j+1 repeat
+      j=j+2 continue;
+    }
+
+    //Mehrzeilige Kommentare auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4] Integer==0x2a2f)
+    {
+      SkipSome(2)
+      if(q[j+4]Integer!=0x2f2a) SkipSome(1) repeat
+      j=j+2
+      continue;
+    }
+    break;
+  }
+}
+
+
+//MVerify(TypedefStruct,NameOfElement) -> A= Typ des Strukturelements oder NULL
+  long LastType,LastBase,LastOfs,LastConstant,PointerFlag,LastPointer,LastVar;
+
+
+proc MVerify(2)
+{
+  pop(a) push(b,c,d,e,x,y)
+  LastOfs=0
+  b=a[0] c=b[TypMembers] d=a[4]
+
+  //Wenn Elementnamen folgen, muá der originale Datentyp als Struktur im Interface stehen
+  if(b[TypID]!=TypStrukt) Bail(35)
+
+  //Struktur muá grunds„tzlich ein Paar Elemente haben
+  if(c==0) Bail(28)
+
+  //Alle Elemente der Struktur testen, eines davon muá es sein!
+  while(c)
+  {
+    //Elementnamen mit Suchstring vergleichen
+    //Dabei unbedingt die brigen Interface-'*'-Sternchen
+    //auslassen
+    x=b[TypMName]
+    y=0
+    if(x[y+4]Char==42) y=y+1 repeat
+
+//    e=0
+//    if(y<x[0])&&(x[y+4]Char==d[e+4]Char) y=y+1 e=e+1 repeat
+
+    a=0
+    if(x[0]-y==d[0])
+    {
+      e=0 a=1
+      while(y<x[0])
+      {
+        if(x[y+4]Char!=d[e+4]Char) a=0 break;
+        y=y+1 e=e+1
+      }
+    }
+
+    //Bei Treffer, Typ in A zurckgeben
+    if(a)
+    {
+      a=b[TypMTyp]
+      break;
+    }
+
+    //Diesen Member in der Strukturdefinition berspringen, Offset aktualisieren
+    a=b[TypMTyp]
+    LastOfs=LastOfs+a[TypSize]
+
+    //Wenn noch nicht gefunden, dann n„chstes Wertepaar im Strukturinterface
+    b=b+4 c=c-1
+  }
+
+  //!!Elementname muá existieren!!
+  if(a==0) Bail(29)
+
+  LastType=a
+  pop(y,x,e,d,c,b)
+}
+
+
+
+/*
+  Lade alle Zeichen u[v+4] bis zum Ende oder bis zum Punkt
+  in den bergebenen String.
+
+  Ist es eine Variable ?
+*/
+proc Member(1)
+{
+  pop(a) push(c,s,t) s=a[0] t=0
+
+  //Ist ein Stern vorne dran ? Dann berspringen und Zeiger vermerken
+  if(u[v+4]Char==42) PointerFlag=1 v=v+1
+
+  //Alle Zeichen kopieren, bis ein Punkt oder Leerzeichen oder Arraystart auftaucht
+  c=u[v+4]Char while(v<u[0])&&(c!=46)&&(c!=32)&&(c!=91)&&(c!=13)&&(c!=10)
+  {
+    s[t+4]=bptr c
+    t=t+1
+    v=v+1
+  }  
+  s[0]=t pop(t,s,c)
+}
+
+//MOV EDI,[xxxxxxxx] ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+/*
+
+  Wenn ich einen Zeiger habe und Strukturelemente m”chte...
+
+    mov edi,ds:esi+heapofs
+    mov al,ds:edi+elementofs
+
+  Jetzt muá es so aussehen
+
+    mov edi,ds:heapofs
+    mov al,ds:edi+elementofs
+
+  Im Prinzip ist das so. Es l„uft falsch.
+
+  Beim ersten Zugriff wird EDI geladen und dann der Access
+  gemacht.
+
+  Beim zweiten Zugriff wird
+*/
+
+proc LadeZeiger(0)
+{
+  //Hat der Zeiger sich nicht ge„ndert? Dann EDI nicht erneut laden lassen und wie gehabt, den bisherigen Offset verwerfen, da tiefere Strukturoffsets sich nur relativ zum Zeiger gewegen und nicht der Zeiger selbst damit gemeint ist^^
+  //!!!!Bei sich wiederholenden <strukturierten Zeigern> den Intl-Status l”schen????!!!! Nochmal nachdenken !!!
+  if(a==LastPointer) LastBase=0 International=0 ParamFlag=0 return()
+  LastPointer=a push(a)
+
+  //Entweder Zeigerregister EDI ber DS:ESI+Disp laden
+  while(ParamFlag==0)
+  {
+    //Ist es ein internationaler Zeiger ? MOV EDI,DS:[Disp] ??
+    if(a[VarInternational])
+    {
+      //Sp„tere Patchloc (im Binfile) fr Exe/Dll-Loader hinzufgen
+      a[a[VarAccessCnt]*4+VarAccessOfs] = FilePos + 4
+      a[VarAccessCnt]=a[VarAccessCnt]+1
+
+      //Die Variable enth„lt einen Pointer, der nach EDI geladen wird <MOV EDI,DS:[Disp]>, RAM-Adresse (auf die gezeigt wird) vom dem Heap irgendeines Programms in EDI laden.
+      PutD(0x3d8b6766) PutD(LastBase) International=0 break;
+    }
+
+    //Entweder kein Displacement
+    if(LastBase==0)                     PutD(0x3e8b6766)
+
+    //Oder nur ein Disp8
+    if(LastBase>=-128)&&(LastBase<=127) PutD(0x7e8b6766) PutB(LastBase) break;
+
+    //Oder ein ganzes Disp32
+    PutD(0xbe8b6766) PutD(LastBase) break;
+  }
+
+  //Oder Zeigerregister EDI ber SS:BP+Disp laden
+  while(ParamFlag==1)
+  {
+    //Entweder nur ein Disp8
+    if(LastBase>=-128)&&(LastBase<=127) PutB(0x66) PutB(0x8b) PutB(0x7e) PutB(LastBase) break;
+
+    //Oder ein ganzes Disp16
+    PutB(0x66) PutB(0x8b) PutB(0xbe) PutW(LastBase) break;
+  }
+  pop(a)
+  LastBase=0
+  ParamFlag=0
+}
+
+//Zeigeroptimierung overriden, wenn der Zeiger im Wert ver„ndert wird!
+/*
+  Hier würde ich etwas eindeutigeres vorziehen.
+
+  Wenn das PF=0 ist, enthält dieser Befehl/Ausdruck
+  kein Sternchen, es könnte also der Wert eines
+  Zeigers geändert werden, u.a. auch der des zuletzt
+  benutzten Zeigers in Lastpointer.
+
+  mov *zeiger,eax
+  add zeiger,4
+  mov *zeiger,ebx
+  add zeiger,4
+
+  Genau dieser Fall tritt ein, wenn das PF=0 und aber
+  die Variable genau dem letzten zeiger entspricht.
+
+  Sobald PF=1 und lastvar==lastpointer tritt der
+  optimistische Fall ein, wo ein Zeiger mehrfach
+  benutzt wird, z.B. um eine Struktur zu füllen.
+
+  Sobald PF=1 und lastvar!=lastpointer, muß der
+  Zeiger gewechselt werden, z.B. bei Pingpong-Zugriffen:
+
+  mov *zeiger1,eax
+  mov *zeiger2,eax
+
+  Wo ist das nun explizit formuliert ??? Das frage
+  ich mich gerade...kann ja nur innerhalb von LadeZeiger()
+  definiert sein.
+
+
+  KONTROLL-STRUKTUR-PROBLEMATIK
+
+  Angenommen innerhalb einer IF-Struktur wird ein
+  Zeiger in EDI geladen. Später hinter dem IF-Case
+  wird derselbe Zeiger wiederverwendet. Das Problem
+  besteht darin, daß wenn der IF-Block übersprungen
+  wird, der Zeiger evtl. nicht in EDI geladen ist!
+
+  Der Assembler kann nicht wissen, ob ein Block
+  übersprungen wird und richtet sich mit seiner
+  Zeigeroptimierung an die einzeln daherkommenden
+  Assemblerzeilen.
+
+  Die Lösung besteht darin, daß der Assembler den
+  Zeiger invalidiert, sobald ein Label auftritt.
+  Das ist zwar suboptimal, aber die einzige Chance
+  Fehler zu vermeiden.
+*/
+
+
+proc CheckZeiger(0)
+{
+  if(PointerFlag==0)&&(LastVar==LastPointer) LastPointer=0
+}
+
+//WORT NACH EIGENSCHAFTEN AUFL™SEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+
+
+proc Binarycode(0)
+{
+  push(e,y,c,b)
+  y=e[InsetNumbytes]
+  c=Ziel
+  b=c[0]
+  while(y)
+  {
+    c[b+4]=bptr e[InsetByteA]
+    y=y-1 e=e+4 b=b+1
+  }
+  FilePos=b c[0]=b
+  pop(b,c,y,e)
+}
+
+proc Memorize(0)
+{
+  //Memory? 32-Bit-Adresse dahinter speichern (Parameter nur Word-Displacements!)
+  z=Ziel
+  if(OpBType>2)||(OpCType>2)
+  {
+    if(ParamFlag==0)     i=z[0] z[i+4]=LastBase      z[0]=i+4 FilePos=z[0]
+    if(ParamFlag==1)
+    {
+      if(PointerFlag==0) i=z[0] z[i+4]=wptr LastBase z[0]=i+2 FilePos=z[0]
+      if(PointerFlag==1) i=z[0] z[i+4]=LastBase      z[0]=i+4 FilePos=z[0]
+    }
+  }
+
+  //Imm8 fr Schiebebefehle zum Schluá eventuell hintendran
+  if(OpCType==1)
+  {
+    a=z[0]
+    z[a+4]=bptr LastConstant
+    z[0]=z[0]+1 FilePos=z[0]
+  }
+}
+
+
+
+
+//PutB(Byte)
+proc PutB(1)
+{
+  pop(a)
+  i=FilePos z=Ziel
+  z[i+4]=bptr a[0]
+  z[0]=z[0]+1 FilePos=z[0]
+}
+//PutW(Word)
+proc PutW(1)
+{
+  pop(a)
+  i=FilePos z=Ziel
+  z[i+4]=wptr a[0]
+  z[0]=z[0]+2 FilePos=z[0]
+}
+//PutD(Dword)
+proc PutD(1)
+{
+  pop(a)
+  i=FilePos z=Ziel
+  z[i+4]=a[0]
+  z[0]=z[0]+4 FilePos=z[0]
+}
+
+
+/*
+ * Viele Befehle lassen auch Memoryoperands zu. Hier wird dann eines
+ * der Spezialregister durch eine GPR-Base ersetzt, von c0 auf 80h
+ * gewechselt und ein 2 oder 4-Byte Offset dazuaddiert (Lokaler/Heapoffset
+ * oder Memberoffset). So lassen sich nicht nur MOVE-Befehle gestalten,
+ * sondern auch viele der Grundrechenoperationen direkt 'im Speicher'
+ * berechnen.
+ */
+proc Postbytes(0)
+{
+  b=e[e[InsetNumbytes]*4+InsetByteA]
+
+  //Zwei Register
+  if(b==0xc0)
+  {
+    PutB(8*x+y+b)
+    return()
+  }
+  //Memory Location
+  if(b==0x80)
+  {
+    if(PointerFlag==0) PutB(8*x+6+b)
+    if(PointerFlag==1) PutB(8*x+7+b)
+    Memorize()
+    return()
+  }
+  //Schiebebefehle mit Imm8-Konstante
+  if(b==0xd0)
+  {
+    PutB(x+b)
+    Memorize()
+    return()
+  }
+}
+
+
+
+//Operanden klassifizieren (Const,Reg,Mem)
+proc Classify(1)
+{
+  pop(a) push(s,t,u,v) u=a[0] v=0
+
+  //Prfen, ob vielleicht ein Register
+  find(Instructions,u,@b) if(b) a=0 pop(v,u,t,s) return()
+
+
+  //Prfen, ob es eine Konstante in Form des "Offset eines Labels oder Funktion" ist
+  find(Labels,u,@a)
+  if(a)
+  {
+    LastConstant=a[28]
+    a=1 pop(v,u,t,s) return()
+  }
+
+
+  //Prfen, ob es eine Konstante ist
+  a=u a=a[4]Char if(a>=48)&&(a<=48+9)||(a==45)
+  {
+    Number(u) LastConstant=a
+    a=1 pop(v,u,t,s) return()
+  }
+
+  //Oder den ersten Variablennamen scannen
+  Member(LineA)
+
+  //Der k”nnte in der Reihe der aktuellen Funktionsparameter liegen
+  find(Params,LineA,@a)
+  if(a)
+  {
+    LastVar=a
+    LastType=a[ParType] ParamFlag=1
+    LastBase=a[ParRel]
+    if(PointerFlag) LadeZeiger()
+  }
+  //Oder in der Reihe der gegenw„rtigen lokalen Variablen
+  if(a==0)
+  {
+    find(Locals,LineA,@a)
+    if(a)
+    {
+      LastVar=a
+      LastType=a[VarType] ParamFlag=1
+      LastBase=a[VarHeap]-LocalPos
+      if(PointerFlag) LadeZeiger()
+    }
+    //Oder in der Reihe der normalen Heap-Variablen
+    if(a==0)
+    {
+      find(Variables,LineA,@a)
+      if(a==0) pop(v,u,t,s) return()
+      LastVar=a
+      LastType=a[VarType]
+      LastBase=a[VarHeap]
+      if(a[VarInternational]) International=a
+      if(PointerFlag) LadeZeiger()
+    }
+  }
+
+
+  /*
+
+    Sobald ein Zeiger im Spiel ist, egal ob nun der alte
+    Zeiger weiterbenutzt wird oder jetzt ein neuer Zeiger
+    geladen wurde, ist es egal, ob dieser Zeiger auf einer
+    Stackvariablen beruht, oder nicht. Es wird dann auf jeden
+    Fall entweder [edi+Disp8] oder [edi+Disp32] verwendet und
+    KEIN [edi+Disp16], also muá Ladezeiger das ParamFlag=0
+    setzen!
+  */
+
+
+
+  /*
+   * EINZELNE VARIABLEN
+   *
+   * Bei einzelnen Variablen kann jetzt zurckgekehrt
+   * werden, da nun alle Daten vorhanden sind.
+   */
+  a=LastType
+  if(a[TypID]!=TypStrukt) pop(v,u,t,s) return()
+
+
+  /*
+   * STRUKTURZUGRIFFE
+   *
+   * Folgt ein Punkt muá der aktuelle Datentyp <struct>
+   * sein und der folgende Ausdruck ein Member dessen.
+   * 
+   * Base/Offset werden gebraucht und entlang der Interface-
+   * definitionen aufsummiert.
+   *
+   * Es drfen zwischendurch keine '*'-Sternchen vorkommen,
+   * da der die ganze Assemblerzeile nur einmal dereferenziert
+   * werden kann.
+   *
+   */
+  while(u[v+4]Char==46)&&(v<u[0])
+  {
+    //Zuerst den Punkt berspringen
+    v=v+1
+
+    //N„chsten Membernamen isolieren
+    Member(LineA)
+
+    //Membernamen in der Typedef suchen, muss existieren
+    MVerify(LastType,LineA)
+
+    //Neue Offsetwerte addieren
+    LastBase=LastBase+LastOfs
+  }
+  a=LastType pop(v,u,t,s)
+}
+
+
+long Opcode,Direction,WordFlag,Modifier,RegFields,Register;
+
+/*  .                                                     .
+ ®ÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄ¯
+    ³                    MODRM-BYTES                      ³
+ ®ÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄ¯
+    ³                                                     ³
+    ³ MOD 00 RMTable1 fr Operandenauswahl                ³
+    ³ MOD 01 RMTable2 mit 8-Bit Signed-Displacement       ³
+    ³ MOD 10 RMTable2 mit 16-Bit Unsigned-Displacement    ³
+    ³ MOD 11 Registerkombination                          ³
+    ³                                                     ³
+    ³ RM-Table1 000 [BX+SI] 010 [BP+SI] 100 [SI] 110  DA  ³
+    ³           001 [BX+DI] 011 [BP+DI] 101 [DI] 111 [BX] ³
+    ³                                                     ³
+    ³ RM-Table2 000 [BX+SI+Disp]                          ³
+    ³           001 [BX+DI+Disp]                          ³
+    ³           010 [BP+SI+Disp]                          ³
+    ³           011 [BP+DI+Disp]                          ³
+    ³           100 [SI+Disp]                             ³
+    ³           101 [DI+Disp]                             ³
+    ³           110 [BP+Disp]                             ³
+    ³           111 [BX+Disp]                             ³
+    ³                                                     ³
+    ³ Direction-Bit: 0=Reg2Mem (store), 1=Mem2Reg (load)  ³
+    ³                                                     ³
+    ³ Word-Bit:      0=byte-Operanden, 1=word-Operanden   ³
+    ³                                                     ³
+    ³ Segment Overrides: CS=2eh ES=26h DS=3eh SS=36h      ³
+    ³                                                     ³
+    ³                                                     ³
+    ³                                                     ³
+    ³ [67h][66h][SEG][Opcode+d+w][ModRM][Adr][Disp]       ³
+    ³                                                     ³
+    ³                                                     ³
+    ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+
+proc ModRM_Displacement(0)
+{
+  //Wenn International, dann DS:[Disp] nehmen (R/M-Field = EBP)
+  a=International if(a)
+  {
+    //Sp„tere Patchloc (im Binfile) fr Exe/Dll-Loader hinzufgen
+    a[a[VarAccessCnt]*4+VarAccessOfs] = FilePos + 1
+    a[VarAccessCnt]=a[VarAccessCnt]+1
+
+    //ModRM + Disp ins Ziel schreiben
+    PutB(Register|5) PutD(LastBase) International=0 return()
+  }
+
+  //Modifier festlegen fr Adressierungsmode-Tabelle2 mit 16- oder 32-Bit Displacement
+  Modifier=0x80
+
+  //Mit dem Modifier die Breite des DISP vorgeben
+  if(LastBase>=-128)&&(LastBase<=127) Modifier=0x40
+  if(LastBase==0)                     Modifier=0x00
+
+  //ModRM-Byte schreiben
+  PutB(Modifier|Register|RegFields)
+
+  //Displacement dahinter speichern (Lokales/Parameter nur Word-Displacements, Pointer immer 32-Bit, Heap immer 32-Bit)
+  if(Modifier==0x80)&&(ParamFlag==0) PutD(LastBase)
+  if(Modifier==0x80)&&(ParamFlag==1) PutW(LastBase)
+  if(Modifier==0x40)                 PutB(LastBase)
+}
+
+//Immediate() Schreibt die Immediatebytes in den Output
+proc Immediate(0)
+{
+  if(w==1) PutB(a)
+  if(w==2) PutW(a)
+  if(w==4) PutD(a)
+}
+
+//Allgemeine Routine zum Coden von Befehlen mit Memory-Operand
+proc MemOpCodingStyle(0)
+{
+  //Es drfen nicht BEIDES Speicherstellen sein
+  if(u>2)&&(v>2) Bail(1532)
+
+  //Load oder Store festlegen
+  if(u>2) CheckZeiger() Direction=0 w=u[TypSize] if(u[TypID]==TypStrukt) w=4
+  if(v>2) CheckZeiger() Direction=2 w=v[TypSize] if(v[TypID]==TypStrukt) w=4
+
+  //Register festlegen und bewerten
+  WordFlag=0 a=0
+  if(b) a=b
+  if(c) a=c
+
+  //Wenn ein Register dabei, seine Nummer und Bytebreite laden
+  if(a) w=a[InsetWidth] Register=a[InsetByteA]*8
+
+  //H”her als Byte->WordFlag, 386er->66h
+  if(w>1)  WordFlag=1
+  if(w==4) PutB(0x66)
+
+  //Regfields fr SS:[BP+Disp] (und gleichzeitig auch der Wert fr ehemalige DS:[ESI+Disp], wird aber nicht mehr verwendet, lol)
+  RegFields=0x06
+
+  //Bei Zeigern wird jedoch ber DS:[EDI+DISP] gearbeitet
+  if(PointerFlag) RegFields=0x07
+
+  //Ist Operand2 eine Konstante ?
+  Opcode=e[InsetByteA] if(v==1)
+  {
+    //Alternativen Opcode w„hlen
+    Opcode=e[InsetByteB]
+
+    //Kein 8-Bit sign-extended Immediate, sondern 8-16-32-Bit passend zum Operanden
+    Direction=0
+
+    //Opcode-Extension im Registerfeld
+    Register=e[InsetByteE]*8
+  }
+
+  //Internationals (und Pointer) sind Realmem, also Address Size Prefix vorneweg
+  if(ParamFlag==0)||(PointerFlag) PutB(0x67)
+
+  //Opcodebyte schreiben
+  PutB(Opcode|Direction|WordFlag)
+
+  //Modifier im Zusammenhang zu DISP, beides in den Output schreiben
+  ModRM_Displacement()
+
+  //Entweder 1, 2 oder 4 Bytes als Konstante hinterherschreiben, falls einer der Operanden eine Konstante ist.
+  if(u==1)||(v==1) a=LastConstant Immediate()
+}
+
+//PushPop(String)
+proc PushPop(1)
+{
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+  Word(WordA) find(Instructions,WordA,@b) if(b==0) Bail(161)
+
+//  if(b[InsetWidth]==3) PutB(b[InsetByteA]+e[InsetByteB]) return()
+
+  if(b[InsetWidth]==1) Bail(162)
+  if(b[InsetWidth]==4) PutB(0x66)
+  PutB(b[InsetByteA] | e[InsetByteA])
+}
+
+//ShortOne(String)
+proc ShortOne(1)
+{
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+  Word(WordA) find(Instructions,WordA,@b) if(b==0) Bail(161)
+  if(b[InsetWidth]==1) Bail(162)
+  if(b[InsetWidth]==4) PutB(0x66)
+  PutB(b[InsetByteA] | e[InsetByteA])
+}
+
+//OneOps(String)
+proc OneOps(1)
+{
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+  Word(WordA) find(Instructions,WordA,@b) if(b==0) Bail(161)
+  if(b[InsetWidth]==4) PutB(0x66)
+  if(b[InsetWidth]==1) PutB(e[InsetByteA])
+  if(b[InsetWidth]>=2) PutB(e[InsetByteA]+1)
+  PutB(b[InsetByteA] | e[InsetByteB])
+}
+
+//OneOps(String)
+proc OneOpsSimple(1)
+{
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+  Word(WordA) find(Instructions,WordA,@b) if(b==0) Bail(161)
+  if(b[InsetWidth]!=4) Bail(162)
+  PutB(e[InsetByteA])
+  PutB(b[InsetByteA] | e[InsetByteB])
+}
+
+//TwoOps(String)
+proc TwoOps(1)
+{
+  //Opcodebytes im Instructionset ausfindig machen
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+
+  //Zwei Operanden klarmachen, letzterer kann auch eine Konstante sein
+  Word(WordA) Need(',') Word(WordB)
+
+  //Variablen clearen und Operandenarten untersuchen
+  OpBType=0 OpBHeap=0 OpBReg=0 PointerFlag=0
+  OpCType=0 OpCHeap=0 OpCReg=0 ParamFlag=0 LastVar=0
+
+  Classify(WordA) OpBType=a OpBReg=b if(a==1) Bail(103)
+  Classify(WordB) OpCType=a OpCReg=b
+
+  b=OpBReg
+  c=OpCReg
+  u=OpBType
+  v=OpCType
+
+  //Kommt eine memory location drin vor ?
+  if(u|v>2) MemOpCodingStyle() return()
+
+  //32-Bit Befehle bekommen ein Operand-Size-Prefix 66h
+  w=b[InsetWidth] if(w==4) PutB(0x66)
+
+  //Entweder beide Operanden sind Register
+  if(c)
+  {
+    if(w!=c[InsetWidth]) Bail(1631)
+    if(w==1) PutB(e[InsetByteA]+2)
+    if(w>=2) PutB(e[InsetByteA]+3)
+    PutB(b[InsetByteA]*8 | c[InsetByteA] | 0xc0)
+  }
+
+  //Oder ein Register und eine Konstante
+  if(c==0)
+  {
+    while(1)
+    {
+      //Konstante mit AL/AX/EAX ist 1 Byte krzer und hat nochmals andere Opcodes (ByteE)
+      a=WordA
+      if(a[4]Integer==0x6c61) PutB(e[InsetByteD]  ) Number(WordB) break;
+      if(a[4]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+      if(a[5]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+
+      //Alle anderen Register bekommen einen extra-Opcode, weil eine Konstante vorkommt
+      if(w==1) PutB(e[InsetByteB])
+      if(w>=2) PutB(e[InsetByteB]+1)
+      PutB(b[InsetByteA]|e[InsetByteC]) Number(WordB) break;
+    }
+    //Entweder 1, 2 oder 4 Bytes als Konstante hinterherschreiben
+    Immediate()
+  }
+}
+
+//TwoOpsNZ(String)
+proc TwoOpsNZ(1)
+{
+  //Opcodebytes im Instructionset ausfindig machen
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+
+  //Zwei Operanden klarmachen, letzterer kann auch eine Konstante sein
+  Word(WordA) Need(',') Word(WordB)
+
+  //Variablen clearen und Operandenarten untersuchen
+  OpBType=0 OpBHeap=0 OpBReg=0 PointerFlag=0
+  OpCType=0 OpCHeap=0 OpCReg=0 ParamFlag=0 LastVar=0
+
+  Classify(WordA) OpBType=a OpBReg=b if(a==1) Bail(103)
+  Classify(WordB) OpCType=a OpCReg=b
+
+  b=OpBReg
+  c=OpCReg
+  u=OpBType
+  v=OpCType
+
+  //Ist die Konstante = Null, dann nix coden und Platz sparen oO
+  if(v==1)&&(LastConstant==0) return()
+
+  //Kommt eine memory location drin vor ?
+  if(u|v>2) MemOpCodingStyle() return()
+
+  //32-Bit Befehle bekommen ein Operand-Size-Prefix 66h
+  w=b[InsetWidth] if(w==4) PutB(0x66)
+
+  //Entweder beide Operanden sind Register
+  if(c)
+  {
+    if(w!=c[InsetWidth]) Bail(1631)
+    if(w==1) PutB(e[InsetByteA]+2)
+    if(w>=2) PutB(e[InsetByteA]+3)
+    PutB(b[InsetByteA]*8 | c[InsetByteA] | 0xc0)
+  }
+
+  //Oder ein Register und eine Konstante
+  if(c==0)
+  {
+    while(1)
+    {
+      //Konstante mit AL/AX/EAX ist 1 Byte krzer und hat nochmals andere Opcodes (ByteE)
+      a=WordA
+      if(a[4]Integer==0x6c61) PutB(e[InsetByteD]  ) Number(WordB) break;
+      if(a[4]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+      if(a[5]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+
+      //Alle anderen Register bekommen einen extra-Opcode, weil eine Konstante vorkommt
+      if(w==1) PutB(e[InsetByteB])
+      if(w>=2) PutB(e[InsetByteB]+1)
+      PutB(b[InsetByteA]|e[InsetByteC]) Number(WordB) break;
+    }
+    //Entweder 1, 2 oder 4 Bytes als Konstante hinterherschreiben
+    Immediate()
+  }
+}
+
+proc StringCodingStyle(0)
+{
+/*
+  Der Operand muá gelext werden, um seine Base zu bekommen.
+
+  Der Zeiger auf den Text wird dann mit MOV *Dest,eax
+  gespeichert.
+
+  Vorher wird EAX mit 16*CS+Textoffset beladen.
+
+  MOV AX,CS
+  SHL EAX,4
+  ADD EAX,Textoffset
+
+  MOV [],EAX
+
+  Da Text immer lokal mit Funktionen zu tun hat, wird in
+  der Regel ein Zeiger aus der SS.BP-Welt auf die Adresse
+  des Textes verschoben.
+
+  Es kann aber auch sinnvoll sein, Text aus einer Funktion
+  an eine globale Heapvariable zu berreichen...
+
+  Es gibt im Grunde viele M”glichkeiten:
+
+  Ich kann dem Compiler sagen, daá er einfach den Text an
+  die Variable zuweisen und dem Assembler die Dichtung
+  berlassen soll. Das fhrt zu lesbarem Assemblertext.
+
+  Ich kann dem Compiler aber auch sagen, daá er die einzelnen
+  Befehle zum laden des Textpointers einzeln in die Datei
+  schreiben soll. Das w„re dann die ausfhrliche Schreibweise,
+  die es dem Programmierer noch erlaubt, den ASM-Code
+  sp„ter noch zu optimieren, indem z.B. Befehle zur Paarung
+  eingeschoben werden.
+
+  "Mir fehlt noch der <mov reg,CS>-Befehl..."
+
+
+  Ein Mittelweg w„re, wenn der Compiler den Text in EAX
+  l„dt, und dann 'MOV Var,eax' hinterherschreibt. So w„re
+  es egal, ob ich Zeiger, Variablen oder Heapvariablen
+  als Ziel der Zuweisung nehme.
+
+  MOV EAX,'TEXT'
+  MOV VAR,EAX
+
+  Hier wird die erste Zeile so bersetzt:
+
+  XOR EAX,EAX
+  MOV  AX,CS
+  ADD EAX,offset 'TEXT'
+
+  So kann der Text dynamisch an die Ausfhrung im RAM
+  gebunden werden.
+
+  Toll an den Codesegmentvariablen ist, daá sie in einem
+  DOS-Adressierbaren Bereich liegen und ohne Umschweife
+  als Ascii-Z-Strings verwendet werden k”nnen.
+
+  Findfirst und open(filename) drften damit kein Problem
+  mehr sein.
+
+  Was passiert in folgendem Fall: 
+
+    open('filename.txt',ReadMode)
+    open('filename.txt',CreateMode)
+    open('filename.txt',AppendMode)
+
+    file = findfirst('*.*');
+
+    *file.name='name.exe'
+
+  Es wirkt problematisch, da der Parameter kein Assignment
+  ist, sondern ein Atom!
+
+  Die Erkennung máte dann also den AKKU laden lassen, um
+  ihn dann auf den Parameterstack zu pushen.
+
+  Im ASM-Text wrde das dann so aussehen:
+
+  MOV  EAX,'TEXT'
+  PUSH EAX
+  MOV  AL,ReadMode
+  PUSH AX
+  CALL OPEN
+
+  Die Ganze Zeit ber war es schon so, daá die Funktionsparameter
+  beim Aufruf ber <Expression()> geparst werden. Also
+  máte es normal sein, daá Zuweisungen darin vorkommen k”nnen.
+
+  Das deckt aber nicht den Fall ab, in dem nur der Text
+  als Parameter auftaucht !
+
+  Wenn ich den Textscanner in den Load-Bereich verschiebe,
+  dann máten natrliche AKKU-Loads darin vorkommen, d.h.
+  im Ergebnis steht da: MOV EAX,'TEXT'.
+
+  Wie der AKKU dann behandelt wird, ist dem Compiler unwichtig,
+  der Assembler braucht nur den Extracode fr MOV EAX,'TEXT'
+  zu erkennen und der Rest flutscht dann schon :-)
+
+  Der Compiler wird jetzt wieder umgebaut, so daá die
+  Texte als LOAD erkannt werden und auch an Funktionen
+  bergeben werden k”nnen...done.
+
+  Der StringCodingStyle wird nun so umgebaut, daá
+  das Register immer EAX ist.
+
+  Der Code ist immer:
+
+  XOR EAX,EAX
+  MOV  AX,CS
+  SHL EAX,4
+  ADD EAX,0xffffffff
+
+
+*/
+
+  //XOR EAX,EAX
+  PutB(0x66)
+  PutB(0x33)
+  PutB(0xc0)
+
+  //MOV AX,CS
+  PutB(0x8c)
+  PutB(0xc8)
+
+  //SHL EAX,4
+  PutB(0x66)
+  PutB(0xc1)
+  PutB(0xe0)
+  PutB(0x04)
+
+  //ADD EAX,XXXX
+  PutB(0x66)
+  PutB(0x05)
+  PutD(0x11223344)
+
+  //Erstes Hochkomma berspringen und WordB aus dem Text generieren
+  j=j+1 a=WordB a[0]=0 i=0
+  while(q[j+4]Char!=39)
+  {
+    a[i+4]=bptr q[j+4]
+    i=i+1
+    j=j+1
+  }
+  j=j+1 a[0]=i
+
+  //Wenn Text noch unbekannt, Container dafr anlegen
+  find(Constants,WordB,@c) if(c==0)
+  {
+    append(0,0,10000,Constants,@c)
+
+//DEBUG UM BEIDE ASSEMBLER ANZUGLEICHEN...SOLL DIE REIHENFOLGE DER STRINGS UMDREHEN
+    xcut(Constants,c)
+    xins(Constants,Constants,c)
+//DEBUG UM BEIDE ASSEMBLER ANZUGLEICHEN...SOLL DIE REIHENFOLGE DER STRINGS UMDREHEN
+
+    strcpy(WordB,c+4)
+    c[24]=0
+  }
+
+  //Index dieses Textpatchlabels (falls mehrere Male derselbe Text erw„hnt wird), anschlieáend weitersetzen
+  i=c[24] c[24]=i+4
+  a=Ziel c[28+i]=a[0]-4
+}
+
+
+//MovXX(String)
+proc MovXX(1)
+{
+  //Opcodebytes im Instructionset ausfindig machen
+  pop(a) find(Instructions,a[0],@e) if(e==0) Bail(160)
+
+  //Zwei Operanden klarmachen, letzterer kann auch eine Konstante sein
+  Word(WordA) Need(',')
+
+  //Strings erkennen und umleiten
+  if(q[j+4]Char==39) StringCodingStyle() return()
+
+  //Zweiter Operand erst jetzt
+  Word(WordB)
+
+  //Variablen clearen und Operandenarten untersuchen
+  OpBType=0 OpBHeap=0 OpBReg=0 PointerFlag=0
+  OpCType=0 OpCHeap=0 OpCReg=0 ParamFlag=0 LastVar=0
+
+  Classify(WordA) OpBType=a OpBReg=b if(a==1) Bail(103)
+  Classify(WordB) OpCType=a OpCReg=b
+
+  b=OpBReg
+  c=OpCReg
+  u=OpBType
+  v=OpCType
+
+  //Kommt eine memory location drin vor ?
+  if(u|v>2) MemOpCodingStyle() return()
+
+  //32-Bit Befehle bekommen ein Operand-Size-Prefix 66h
+  w=b[InsetWidth] if(w==4) PutB(0x66)
+
+  //Entweder beide Operanden sind Register
+  if(c)
+  {
+    if(w!=c[InsetWidth]) Bail(1631)
+    if(w==1) PutB(e[InsetByteA]+2)
+    if(w>=2) PutB(e[InsetByteA]+3)
+    PutB(b[InsetByteA]*8 | c[InsetByteA] | 0xc0)
+  }
+
+  //Oder ein Register und eine Konstante
+  if(c==0)
+  {
+    while(1)
+    {
+      //Konstante mit AL/AX/EAX ist 1 Byte krzer und hat nochmals andere Opcodes (ByteE)
+/*      a=WordA
+      if(a[4]Integer==0x6c61) PutB(e[InsetByteD]  ) Number(WordB) break;
+      if(a[4]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+      if(a[5]Integer==0x7861) PutB(e[InsetByteD]+1) Number(WordB) break;
+*/
+      //Alle anderen Register bekommen einen extra-Opcode, weil eine Konstante vorkommt
+      if(w==1) PutB(e[InsetByteB])
+      if(w>=2) PutB(e[InsetByteB]+1)
+//      PutB(b[InsetByteA]|e[InsetByteC]) Number(WordB) break;
+      PutB(b[InsetByteA]|e[InsetByteC]) a=LastConstant break;
+
+    }
+    //Entweder 1, 2 oder 4 Bytes als Konstante hinterherschreiben
+    Immediate()
+  }
+}
+
+
+//FLoadStore(String) ---------------------------------------
+/*
+  Ich brauche nur die Bytekette bis zum Displacement und
+  ich muá nur zwischen den 16-Bit/32-Bits unterscheiden,
+  und evtl. ein db67h davorzulegen ^.^
+*/
+proc FLoadStore(1)
+{
+  //Opcodebytes im Instructionset ausfindig machen
+  pop(a) e=a[0]
+
+  //Variablen clearen und Operandenarten untersuchen
+  OpBType=0 OpBHeap=0 OpBReg=0
+  OpCType=0 OpCHeap=0 OpCReg=0
+  PointerFlag=0 ParamFlag=0 LastVar=0
+
+  //1.Operanden klarmachen
+  Word(WordA) Classify(WordA) c=b
+
+  //Ist Operand A ein Register ? Dann muá Operand B auch ein Register sein
+  if(c!=0)
+  {
+    Need(',')
+    Word(WordB) Classify(WordB) if(b==0) Bail(1824)
+
+    //Ist ParameterA Null, ist ParameterB frei gew„hlt st(0)..st(7) ??
+    if(c[InsetByteA]==0) PutB(e[InsetByteF]) PutB(e[InsetByteG]+b[InsetByteA]) return()
+
+    //Ist ParameterB Null, ist ParameterA frei gew„hlt st(0)..st(7) ??
+    if(b[InsetByteA]==0) PutB(e[InsetByteD]) PutB(e[InsetByteE]+c[InsetByteA]) return()
+  }
+
+
+  //
+  CheckZeiger()
+
+  //Wenn International, dann DS:[Disp32] nehmen (R/M-Field = EBP)
+  a=International if(a)
+  {
+    PutB(0x67)
+    PutB(e[InsetByteA])
+    PutB(e[InsetByteC])
+
+    //Sp„tere Patchloc (im Binfile) fr Exe/Dll-Loader hinzufgen
+    a[a[VarAccessCnt]*4+VarAccessOfs] = FilePos
+    a[VarAccessCnt]=a[VarAccessCnt]+1
+
+    //Befehl+Disp32 ins Ziel schreiben
+    PutD(LastBase) International=0 return()
+  }
+
+  //Zeiger benutzen das zweite Byte + 1..(ds:[edi+disp32])
+  if(PointerFlag)
+  {
+    PutB(0x67)
+    PutB(e[InsetByteA])
+    PutB(e[InsetByteB]+1)
+    PutD(LastBase) return()
+  }
+
+  //Lokale/Parameter-Variablen sind min. 1 Byte krzer
+  PutB(e[InsetByteA])
+  PutB(e[InsetByteB])
+  PutW(LastBase) return()
+}
+
+
+
+
+//MovSX('movsx/movzx')
+proc MovSX(1)
+{
+  pop(a)
+  find(Instructions,a[0],@e) if(e==0) Bail(160)
+  Word(WordA) find(Instructions,WordA,@b) if(b==0) Bail(161)
+  Need(',')
+  Word(WordB) find(Instructions,WordB,@c) if(c==0) Bail(161)
+  if(b[InsetWidth]<=c[InsetWidth]) Bail(164)
+  if(b[InsetWidth]==4) PutB(0x66)
+  PutB(e[InsetByteA])
+  if(c[InsetWidth]==1) PutB(e[InsetByteB])
+  if(c[InsetWidth]>=2) PutB(e[InsetByteB]+1)
+  PutB(b[InsetByteA]*8 | c[InsetByteA] | e[InsetByteC])
+}
+
+
+//ShiftRoll('shl/sal/sar/shr/rol/ror')
+proc ShiftRoll(1)
+{
+  pop(a)
+  find(Instructions,a[0],@e) if(e==0) Bail(160)
+
+  //Operand 1&2 einscannen
+  Word(WordA) Need(',') Word(WordB)
+
+  //Arten klassifizieren
+  Classify(WordA) OpBType=a OpBReg=b if(a==1) Bail(103)
+  Classify(WordB) OpCType=a OpCReg=b
+
+  WordFlag=0
+
+  b=OpBReg
+  c=OpCReg
+  u=OpBType
+  v=OpCType
+
+  //Datenbreite ermitteln und entsprechende Schalter setzen
+  if(b) w=b[InsetWidth]
+  else w=u[TypSize]
+  if(w==4) PutB(0x66)
+  if(w>=2) WordFlag=1
+
+  //Opcode fr <SHIFT X,IMM8> mit Imm8>=1
+  Opcode=e[InsetByteA]
+
+  //Wenn Op2 kein Register, dann muá es Imm8 sein
+  if(c==0)
+  {
+    if(v!=1) Bail(1402)
+    //Shift 1 hat einen krzeren Code
+    if(LastConstant!=1) Opcode=e[InsetByteA]
+    else                Opcode=e[InsetByteB]
+  }
+
+  //Wenn Op2 ein Register, muá es CL sein
+  if(c)
+  {
+    if(c[InsetByteA]!=1) Bail(1317)
+    Opcode=e[InsetByteC]
+  }
+
+  //Opcode schreiben und WordFlag beachten
+  PutB(Opcode | WordFlag)
+
+  //Modifier, OpcodeExtension und Registerindex festlegen
+  if(b==0) Bail(1318)
+  Modifier=0xc0
+  RegFields=b[InsetByteA]
+  Register=e[InsetByteD]*8
+
+  //ModRM-Byte schreiben
+  PutB(Modifier | Register | RegFields)
+
+  //Imm8 Byte schreiben, wenn vorhanden
+  if(c==0)&&(LastConstant>1) PutB(LastConstant)
+}
+
+
+proc ScanFilename(0)
+{
+  push(u,v) u=WordA v=0
+  while(1)
+  {
+    if(q[j+4]Char==62) break;
+    u[v+4]=bptr q[j+4]
+    j=j+1 v=v+1
+  }
+  u[0]=v pop(v,u)
+}
+
+
+
+
+
+
+proc Block(0)
+{
+  while(j<q[0])
+  {
+    //Erste Leerstellen und Kommentare weglassen
+    Comment()
+    if(j>=q[0]) break;
+
+    //<ENDP> erkennen
+    if(q[j+4]==0x70646e65)
+    {
+      //Alle Strings und Konstanten sollen jetzt in die MOV-Befehle gepatcht werden, wo sie drin vorkamen, damit die šbersetzung fr Konstanten abgeschlossen werden kann
+      e=Constants
+      e=e[0] while(e)
+      {
+        //Aktuelle Position im Codesegment (nach der Funktion) als Ziel der Ablage
+        u=Ziel
+        v=u[0]
+
+        //Jeder Text kann mehrere Vorkommnisse in der Funktion gehabt haben und jedes davon wird einzeln mit derselben Location gepatcht. Zur Erinnerung: Es wird eine Konstante geladen, die einen Zeiger darstellt.
+        i=0
+        while(i<e[24])
+        {
+          //Patchlabel aus dem Array laden
+          a=e[28+i]
+
+          //16-Bit Offset als DWORD im Code patchen (ADD EAX,XXXXXXXX), der Text beginnt gleich an der jetzigen Position. Diese Position wird in ADD EAX,?? gepatcht
+          u[a+4]=v
+          i=i+4
+        }
+
+        //Text als Quelle in A, immer 4 Byte mehr kopieren, damit der L„ngenbezeichner nicht verloren geht
+        a=e[4]
+        b=a[0]
+
+        //Bytes inlusive L„ngenbeschreiber und Ascii-Z-Byte kopieren und CS:IP ans weiterfhrende Ende bewegen
+        copy(a,u+4+v,b+4)
+        u[4+v+b+4]=bptr 0
+        u[0]=v+b+4+1 FilePos=u[0]
+      }
+
+      //Funktionenrelevante Variablen resetten, Puffer leeren
+      j=j+4 IsFar=0 a=Params erase(a[0]) ParaSize=0 a=Locals erase(a[0]) LocalFlag=0 LocalPos=0 LastPointer=0 a=Constants erase(a[0]) continue;
+    }
+
+    //<RETN> erkennen
+    if(q[j+4]==0x6e746572)
+    {
+      j=j+4
+      if(IsFar)    find(Instructions,'retfn',@e) if(e==0) Bail(160)
+      if(IsFar==0) find(Instructions,'retn' ,@e) if(e==0) Bail(160)
+      Binarycode()
+      PutW(ParaSize)
+      continue;
+    }
+
+    //1-Byte Befehle mit nur einem Operand
+    if(q[j+4]==0x68737570) j=j+4 PushPop('push')  continue;
+    if(q[j+4]==0x20706f70) j=j+4 PushPop('pop')   continue;
+    if(q[j+4]==0x20636e69) j=j+4 ShortOne('inc')  continue;
+    if(q[j+4]==0x20636564) j=j+4 ShortOne('dec')  continue;
+    if(q[j+4]==0x72746e69)
+    {
+      j=j+4 find(Instructions,'intr',@e) if(e==0) Bail(1113)
+
+      PutB(e[InsetByteA])
+      Word(WordA) Number(WordA) PutB(a)
+
+      continue;
+    }
+
+    //2-Byte Befehle mit nur einem Operanden
+    if(q[j+4]==0x2067656e) j=j+4 OneOps('neg')  continue;
+    if(q[j+4]==0x20746f6e) j=j+4 OneOps('not')  continue;
+    if(q[j+4]==0x206c756d) j=j+4 OneOps('mul')  continue;
+    if(q[j+4]==0x6c756d69) j=j+4 OneOps('imul') continue;
+    if(q[j+4]==0x20766964) j=j+4 OneOps('div')  continue;
+    if(q[j+4]==0x76696469) j=j+4 OneOps('idiv') continue;
+    if(q[j+4]==0x61777362) j=j+5 OneOpsSimple('bswap') continue;
+
+
+    //2-Byte Befehle mit 2 Ops
+    if(q[j+4]==0x74736574)    j=j+4 TwoOps('test') continue;
+    if(q[j+4]==0x20706d63)    j=j+4 TwoOps('cmp')  continue;
+    if(q[j+4]==0x20646e61)    j=j+4 TwoOpsNZ('and')  continue;
+    if(q[j+4]Integer==0x726f) j=j+2 TwoOpsNZ('or')   continue;
+    if(q[j+4]==0x20726f78)    j=j+4 TwoOpsNZ('xor')  continue;
+    if(q[j+4]==0x20646461)    j=j+4 TwoOpsNZ('add')  continue;
+    if(q[j+4]==0x20627573)    j=j+4 TwoOpsNZ('sub')  continue;
+    if(q[j+4]==0x20636461)    j=j+4 TwoOps('adc')  continue;
+    if(q[j+4]==0x20626273)    j=j+4 TwoOps('sbb')  continue;
+
+    //MOV-Befehl
+    if(q[j+4]==0x20766f6d)    j=j+4 MovXX('mov')  continue;
+
+    //Shift/Roll-Befehle
+    if(q[j+4]==0x206c6873) j=j+4 ShiftRoll('shl') continue;
+    if(q[j+4]==0x20726873) j=j+4 ShiftRoll('shr') continue;
+    if(q[j+4]==0x206c6173) j=j+4 ShiftRoll('sal') continue;
+    if(q[j+4]==0x20726173) j=j+4 ShiftRoll('sar') continue;
+    if(q[j+4]==0x206c6f72) j=j+4 ShiftRoll('rol') continue;
+    if(q[j+4]==0x20726f72) j=j+4 ShiftRoll('ror') continue;
+    if(q[j+4]==0x206c6372) j=j+4 ShiftRoll('rcl') continue;
+    if(q[j+4]==0x20726372) j=j+4 ShiftRoll('rcr') continue;
+
+    //MOVSX/MOVZX
+    if(q[j+4]==0x73766f6d)&&(q[j+8]Integer==0x2078) j=j+6 MovSX('movsx') continue;
+    if(q[j+4]==0x7a766f6d)&&(q[j+8]Integer==0x2078) j=j+6 MovSX('movzx') continue;
+
+    //SETXX
+    if(q[j+4]Integer==0x6573)&&(q[j+6]Char==0x74)
+    {
+      Word(WordA) Word(WordB)
+      find(Instructions,WordA,@e) if(e==0) Bail(3122)
+      find(Instructions,WordB,@b) if(b==0) Bail(3123)
+      if(b[InsetWidth]!=1) Bail(3124)
+      PutB(e[InsetByteA])
+      PutB(e[InsetByteB])
+      PutB(b[InsetByteA]+0xc0)
+      continue;
+    }
+
+    //Mnemonic testen, beginnt mit einem 'j' oder ist es 'call' ??
+    if(q[j+4]Char==106)||(q[j+4]==0x6c6c6163)
+    {
+      //!!Zeiger-Register kann sich ge„ndert haben!!
+      LastPointer=0
+
+      //Jeder Jump ein anderer ID
+      Word(WordA)
+
+      //Der erste Operand muss ein Label sein
+      Word(WordB)
+
+      //Jump/Call-Instructionbytes in E laden
+      find(Instructions,WordA,@e) if(e==0) Bail(106)
+
+      //Existiert schon ein Label/Funktion mit diesem Namen ?
+      find(Labels,WordB,@l)
+      if(l)
+      {
+        //Ist das Label eine FAR-Funktion, die hier aufgerufen wird ?
+        if(l[24])
+        {
+          //Dann nur den Far-Call innerhalb des Relocation-Eintrages um einen Aufruf erweitern
+          l[l[32]*4+36]=FilePos+e[InsetNumbytes]
+          l[32]=l[32]+1
+
+          //Farcall-Instructionbyte + DWORD-Space fr sp„teren Seg:ofs-Patch seitens des Exe/Dll-loaders
+          PutB(e[36])
+          PutD(0)
+          continue;
+        }
+        l=l[28]
+      }
+
+      //Existiert das Label noch nicht, ist es eine Zeigervariable oder der (near)Jump wird sp„ter gepatcht, weil die forward-definition fehlt und das Label sp„ter im Code definiert wird
+      if(l==0)
+      {
+        //Geht der Call ber eine globale Variable ? (fr variablisierte Prozessaufrufe seitens des Kernels)
+//        find(Variables,WordB,@l) if(l)
+        find(Locals,WordB,@l) if(l)
+        {
+          //Dann muá es ein Zeiger sein und der call geht ber ds:edi
+
+/*
+  Hier wird im Grunde festgelegt, daá der Call ber eine
+  Variable l„uft. Diese Variable ist auf dem Heap, d.h.
+  ich brauche das Address-Size-Prefix und ein 32-Bit-Disp.
+  Dazwischen liegt der Opcode + Modifier...
+
+  Ich h„tte jetzt aber gerne eine Variable im Stacksegment.
+  Eine Lokale Variable, d.h ich brauche kein 67h mehr, habe
+  aber ein Segment-Override (SS) und benutze BP+Disp16
+
+  Bei Heapvariablen, die ber ESI bzw. hier EDI adressiert
+  werden, ist der Heapofs eine Konstante, die schon zu
+  Beginn, „hnlich einer COM-Datei festliegt und nur das
+  Register ist Variabel. Wenn ich jetzt aber eine public-
+  Variable nehme, muá der Heapoffset noch gepatcht werden,
+  d.h. ich muá den Patch einreichen, damit er in der Reloz-
+  Liste auftaucht und der EXE-Loader das machen kann.
+
+  Bei lokalen Variablen sollte der relative Offset allerdings
+  fest sein und BP h„ngt halt am jeweiligen Stackwert.
+  Darum sollte es mit Stack erstmal besser klappen. Hoffen
+  wir's  :-)
+
+
+          LastVar=l
+          PutB(0x67)
+          PutB(e[40])
+          PutB(e[44])
+          PutD(l[VarHeap])
+
+*/
+
+          LastVar=l
+          PutB(e[40])
+          PutB(e[44])
+          PutW(l[VarHeap]-LocalPos)
+          continue;
+        }
+
+        //Ansonsten das Patchlabel fr near-Sprnge speichern
+        append(0,0,4,Jumps,@a)
+        strcpy(WordB,a+4) a[24]=FilePos+e[InsetNumbytes]
+      } 
+
+      //Erst den Opcode, dann das Sprungdelta schreiben
+      Binarycode()
+      if(l)    PutW(l-FilePos-2)
+      if(l==0) PutW(0)
+      continue;
+    }
+
+    //Typendefinitionen erkennen
+    if(q[j+4]==0x70797423)&&(q[j+8]==0x66656465)
+    {
+      j=j+8
+      Word(WordA) find(Typedef,WordA,@a) if(a) Bail(19)
+      append(0,0,8100,Typedef,@b) b[TypID]=TypVar
+      strcpy(WordA,b+TypName)    Need(',') //Identifier
+      Word(WordA) Number(WordA) b[TypSize]=a Need(',') //Numberofbytes
+      Word(WordA) Number(WordA) b[TypMask]=a Need(',') //Bitmask
+      Word(WordA) Number(WordA) b[TypBits]=a           //Type
+      continue;
+    }
+
+    //struct Strukturdeklaration erkennen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯    
+    if(q[j+4]==0x75727473)&&(q[j+8] Integer==0x7463)
+    {
+      SkipSome(6) Word(WordA) find(Typedef,WordA,@a) if(a) Bail(20)
+
+      //Neuen Datentyp erzeugen
+      Comment() Need('{') Comment()
+      append(0,0,8100,Typedef,@b) blast(b+24,8100,0)
+      b[TypID]=TypStrukt
+      strcpy(WordA,b+TypName)
+
+      //Offsets und Anzahl der Strukturmember bestimmen
+      e=0
+      h=0
+      while(1)
+      {
+        //Member-Typen auffinden und als Zeiger speichern
+        Word(WordA) find(Typedef,WordA,@k) if(k==0) Bail(22)
+
+        if(k[TypID]==TypFunc) Bail(23)
+        n=k[TypSize]
+
+        //Alle durch Kommas getrennten Member dieses Typs erkennen
+        while(1)
+        {
+          //Membernamen einchecken
+          Word(WordA) strcpy(WordA,h>>2+b+TypMName)
+
+          //Membertypen fr jeden Member dieses Typs bernehmen
+          b[h>>2+TypMTyp]=k
+
+          //Arrayangaben testen
+          Find('[') c=a a=1 if(c)
+          {
+            Word(WordB) Need(']')
+            Number(WordB)
+          }
+
+          //Wenn als Zeiger definiert wird, nur 4 Bytes belegen
+          x=WordA if(x[4]Char==42) e=4*a+e
+          else                     e=n*a+e
+
+          //Alle Strukturmember mitz„hlen
+          h=h+1
+
+          //Eventuell noch mehr Member dieses Typs. Nach jedem Member darf ein Kommentar folgen
+          Find(',') if(a==0) Comment() break;
+          Comment()
+        }
+        Find('}') if(a) break;        
+      }
+      b[TypSize]=e
+      b[TypMembers]=h
+
+      continue;
+    }
+
+    //link <DLL>  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4]==0x6b6e696c)
+    {
+      j=j+4 Need('<') ScanFilename() Need('>')
+      append(0,0,4,DLLs,@a)
+      strcpy(WordA,a+4)
+      DLLCount=DLLCount+1
+      continue;
+    }
+
+    //'far ' HEILIGE FAR-FUNTIONEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4]==0x20726166) j=j+4 IsFar=1 Relocations=Relocations+1
+
+    //'public' ™FFENTLICHE VARIABLEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4]==0x6c627570)&&(q[j+8]Integer==0x6369) j=j+6 IsInternational=1 IsPublic=1
+
+    //'extern' EXTERNE VARIABLEN ERKENNEN ÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4]==0x65747865)&&(q[j+8]Integer==0x6e72) j=j+6 IsInternational=1 IsPublic=0
+/*
+  Ich erinnere mich, daß damals in der Zukunft, meine Mutter sehr besorgt war, weil
+  die Klingel und das Klingelschild nicht mehr zusammen waren und ich wünschem mir,
+  daß meiner Mutter nichts böses geschieht und sie und ich wieder wie alte Freunde
+  zusammen sind.
+
+  Ich erinnere mich, daß damals in der Zukunft, dieser Marcel-Typ schlechte Kunde
+  über mich verbreitet hat und sogar Daniel nichts mehr von mir wissen wollte und
+  ich wünsche mir, daß das nicht wieder passiert und wir wieder eine Familie sind
+  und diese Marcel-Typen das Weite suchen.
+
+
+*/
+    //'flatmode' FLATMODE AKTIVIEREN ----------------------------
+    if(q[j+4]==0x74616c66) //&&(q[j+8]==65646f6d)
+    {
+      j=j+4
+
+      //LGDT ES:PWORD PTR [0000]
+      PutD(0x16010f26)
+      PutW(0x0000)
+
+      PutD(0xfa0008bb)
+      PutD(0x0dc0200f)
+      PutD(0x220f0001)
+      PutD(0x8e00ebc0)
+      PutD(0x8ee38eeb)
+      PutD(0x25db8ec3)
+      PutD(0x220ffffe)
+      PutD(0x6600ebc0)
+      PutD(0xe88ec033)
+      PutD(0x92e4d88e)
+      PutD(0x92e6020c)
+      PutB(0xfb) continue;
+    }
+
+    //Versuchen, das erste Wort zu scannen ------------------
+    Word(WordA)
+
+    //Neue Labels erkennen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j+4]Char==58)
+    {
+      j=j+1 append(0,0,8,Labels,@a)
+      strcpy(WordA,a+4)
+      a[24]=0
+      a[28]=FilePos
+
+      //Zeigeroptimierung annullieren, da der Assembler nicht wissen kann, ob der innerhalb des Blocks geladene Zeiger auch dann in EDI geladen ist, wenn der Block übersprungen wird.
+      LastPointer=0
+      continue;
+    }
+
+    //Variablendefinition erkennen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯    
+    find(Typedef,WordA,@c) while(c)
+    {
+      //Variablennamen scannen und Zeiger beachten
+      SkipSpaces()
+      y=0 if(q[j+4]Char==42) y=1 SkipSome(1)
+      Word(WordB)
+
+      //Klammer bedeutet Funktions-Interface, Variablen jetzt lokal
+      SkipSpaces()
+      if(q[j+4]Char==40)
+      {
+        j=j+1 SkipSpaces()
+        ParaSize=0
+        LocalFlag=1
+
+        //!!Auf gar keinen Fall doppelte Prozedurnamen erlauben!!
+//        find(Labels,WordB,@a) if(a) Bail(32)
+        find(Labels,WordB,@a) if(a) clear(a)
+
+        //Label-Liste updaten, entweder kleiner Container fr near-Sprnge/Calls oder groáer Container fr far-Funktionen mit ellenlangen Patchlisten
+        if(IsFar) append(0,0,10000,Labels,@e) e[24]=1
+        else      append(0,0,    8,Labels,@e) e[24]=0
+
+        //Relative Dateiposition im Label ablegen, bisher noch keine Aufrufe gez„hlt
+        strcpy(WordB,e+4)
+        e[28]=FilePos
+        e[32]=0
+
+        //Falls es keine Parameter gibt, ist hier Schluá. Wegen der Modularit„t noch schnell testen, ob der Implementationsteil HIER oder auáerhalb dieser Datei liegt. Entsprechend gibt es dann keine lokalen Variablen mehr, sondern wir sind wieder im Heap zwischen den Funktionen.
+        if(q[j+4]Char==41)
+        {
+          //Interface-Teil einer Funktion ? Dann wieder global und Flags l”schen^.^
+          j=j+1 if(q[j+4]Char==59) j=j+1 IsFar=0 e[28]=0 LocalFlag=0
+          continue 2;
+        }
+
+        //Parameter werden hier nacheinander typisiert und fr den Assembler in der Parameterliste abgelegt
+        while(1)
+        {
+          //Datentyp scannen, Dereferenzierungen beachten
+          Word(WordD) SkipSpaces()
+          x=0 if(q[j+4]Char==42) x=1 j=j+1
+
+          //Parameternamen scannen
+          Word(WordE)
+          find(Typedef,WordD,@a) if(a==0) Bail(151) //'Unknown type'
+          find(Params,WordE,@b) if(b) Bail(152)     //'Duplicate parameter'
+
+          //Alle Daten speichern
+          append(0,0,16,Params,@b)
+          b[ParType]=a
+          b[ParOfs]=ParaSize
+          b[ParPtrFlag]=x
+          strcpy(WordE,b+ParName)
+
+          //Parameterstack updaten
+          if(x==1) ParaSize=ParaSize+PtrSiz
+          if(x==0) ParaSize=ParaSize+a[TypSize]
+
+          //Parameter enden mit der ')'-Klammer oder es mssen weitere, durch Kommas getrennte folgen
+          SkipSpaces()
+          if(q[j+4]Char==41) j=j+1 break;
+          if(q[j+4]Char!=44) Bail(159)
+          j=j+1
+        }
+
+        //Parameter gehen rckw„rts relativ zu SS:[BP+xx], bei Far-Funktionen sogar noch 2 Bytes mehr
+        a=Params a=a[0] x=IsFar*2+ParaSize+2+2
+        while(a)
+        {
+          if(a[ParPtrFlag]) x=x-PtrSiz
+          else b=a[ParType] x=x-b[TypSize]
+          a[ParRel]=x
+          a=a[0]
+        }
+
+        //Ist es nur der Interface-Teil, wird der Funktionsoffset auf Null gesetzt, damit der Exe/Dll-Loader bescheid weiá, daá die Funktion im Pool sein muá und nicht hier. Die Funktion bleibt weiterhin FAR und alle Aufrufe werden als Patchadressen unter der Funktion notiert
+        if(q[j+4]Char==59) j=j+1 IsFar=0 e[28]=0 LocalFlag=0 a=Params erase(a[0]) ParaSize=0
+
+        //Evtl. noch Kommentare etc
+        //Comment()
+        continue 2;
+      }
+
+      while(LocalFlag==1)
+      {
+        //Arrayangaben testen
+        Find('[') x=a a=1 if(x)
+        {
+          Word(WordA) Need(']')
+          Number(WordA)
+        }
+        append(0,0,100,Locals,@e)
+        strcpy(WordB,e+VarName)
+        e[VarType]=c
+        e[VarDeRefCnt]=y
+        e[VarHeap]=LocalPos
+
+        //Dem Localspace entsprechend Bytes weitersetzen
+        if(y==0) LocalPos=c[TypSize]*a+LocalPos
+        else     LocalPos=LocalPos+PtrSiz
+
+        //Wenn noch ein Komma folgt, weitere Locals dieses Typs erzeugen
+        Find(',') if(a==0) continue 3;
+
+        //N„chster Localname in der Reihe, eventuell als Zeiger definiert
+        SkipSpaces()
+        y=0 if(q[j+4]Char==42) y=1 SkipSome(1)
+        Word(WordB)
+      }
+
+      find(Variables,WordB,@a) if(a) Bail(33)     //'Duplicate Symbol'-Message...
+
+      //Arrayangaben testen
+      Find('[') x=a a=1 if(x)
+      {
+        Word(WordA) Need(']')
+        Number(WordA)
+      }
+      append(0,0,4000,Variables,@e)               //Neue Variable anlegen
+      strcpy(WordB,e+VarName)                     //Variablennamen und
+      e[VarType]=c                                //Direkten Zeiger auf Typenbeschreibung speichern
+      e[VarDeRefCnt]=y                            //Bei Zeigern maximale Anzahl derefernzierungen speichern
+      e[VarHeap]=HeapPos                          //Heapposition der Variablen speichern
+//      e[VarInternational]=IsInternational         //Internationale Variablen werden vom Assembler berwacht
+      e[VarInternational]=1                       //Internationale Variablen werden vom Assembler berwacht
+      e[VarAccessCnt]=0                           //Bisher noch keine Zugriffe an die Variable (fr internationale Sachen, wo die Adresse erst zur Laufzeit bekannt wird)
+
+      //Internationale Variablen diskret hochz„hlen
+//      if(IsInternational)
+//      {
+      Internationals=Internationals+1
+      if(IsPublic==0) e[VarHeap]=0
+      else
+      {
+        //Heap weitersetzen (Pointer beachten)
+        if(y==0) HeapPos=c[TypSize]*a+HeapPos
+        else     HeapPos=HeapPos+PtrSiz
+      }
+//      }
+/*
+      if(IsInternational==0)
+      {
+        //Heap weitersetzen (Pointer beachten)
+        if(y==0) HeapPos=c[TypSize]*a+HeapPos
+        else     HeapPos=HeapPos+PtrSiz
+      }
+*/
+      //Wenn noch ein Komma folgt, weitere Variablen dieses Typs erzeugen
+      Find(',') if(a==0) IsInternational=0 IsPublic=0 continue 2;
+    }
+
+
+    //Annahme: kein Zeiger, sondern h”chstens eine der Heapvariablen, welche auch ein Zeiger sein kann...
+    PointerFlag=0  
+    ParamFlag=0
+
+    //Befehle anhand der Kennung sortieren ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    find(Instructions,WordA,@e) if(e)
+    {
+      //Kennung aus Befehlssatz lesen
+      a=e[InsetWidth]<<4
+
+      //PARAMETERLESS-Befehle ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      if(a==0x07) Binarycode() continue;
+
+      //FPU-LOAD/STORE-Befehle ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      if(a==0x09) FLoadStore(e) continue;
+
+      //MMX-/SSE-Befehle ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      if(a==0x08)
+      {
+        Word(WordB) Need(',') Word(WordC)
+
+        OpBType=0 OpBHeap=0
+        OpCType=0 OpCHeap=0
+
+        //Op1 berprfen, darf kein <const> sein!
+        Classify(WordB) OpBType=a if(a==1) Bail(103)
+
+        //Op2 kann <mem>, <const> oder <xxx> sein
+        Classify(WordC) OpCType=a
+
+        //Es drfen nicht beide Memory sein
+        if(OpBType>2)&&(OpCType>2) Bail(105)
+
+        //Ein oder zwei Register/MM-Register indizieren
+        if(OpBType==0) find(Instructions,WordB,@a) x=a[InsetByteA]Byte
+        if(OpCType==0) find(Instructions,WordC,@a) y=a[InsetByteA]Byte
+
+        //Heapvariablen mit 32-Bit-Adresse, also Address Size Prefix 67h
+        if(OpBType>2)||(OpCType>2)
+        {
+          if(ParamFlag==0) PutB(0x67)
+          if(ParamFlag==1)&&(PointerFlag) PutB(0x67)
+        }
+        //Bin„ren Code erzeugen
+        Binarycode() Postbytes() continue;
+      }
+    }
+
+    //Alles andere sind ungltige Zeichen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    Bail(1239)
+  }
+}
+
+
+
+
+proc JPatch(0)
+{
+  j=Jumps j=j[0]
+  while(j)
+  {
+    //Jeder Container enth„lt eine zu patchende Adresse im Code und den Labelnamen
+    find(Labels,j[4],@l) if(l==0) Bail(109)
+
+    //Die Jumpliste enth„lt die zu patchende Adresse
+    y=j[24]
+
+    //Das Delta zwischen Jump und Label wird in den Jump gepatcht
+    x=Ziel
+    x[y+4]=wptr l[28]-y-2
+
+    j=j[0]    
+  }
+}
+
+
+
+
+/************************************************************
+
+                 SCHREIBEN DER DLL-LISTE
+
+ ************************************************************
+
+  Die Liste der ben”tigten DLLs beginnt natrlich mit derer
+  Anzahl.
+
+  Darauf folgen die einzelnen Dateinamen, die der Loader
+  zus„tzlich bereitstellen muá, bevor die einzelnen far-Calls
+  gepatcht werden k”nnen.
+
+ ************************************************************/
+proc Linking(0)
+{
+  //Zuerst die Anzahl der ben”tigten DLLs schreiben, damit der Loader es leichter hat^^
+  j=DLLCount write(@j,4)
+
+  //Jetzt alle dere Dateinamen hintereinander in die Zieldatei schreiben
+  j=DLLs j=j[0]
+  while(j)
+  {
+    a=j[4] write(a,a[0]+4)
+    j=j[0]
+  }
+}
+
+
+
+
+
+/************************************************************
+
+               SCHREIBEN DER RELOZIERUNGSLISTE
+
+ ************************************************************
+
+  Die Relozierungsliste beginnt natrlich mit der Anzahl
+  der ”ffentlichen Routinen.
+
+  Darauf folgen die einzelnen Routinen mit ihrem Namen
+  und ihrem Offset. Dazu kommt dann noch die Anzahl der
+  Aufrufe und die Offsetreihe mit den Patchoffsets.
+
+ ************************************************************/
+proc Relocation(0)
+{
+  //Anzahl Relozierungen speichern
+  a=Relocations write(@a,4)
+
+  //Alle Far-Funktionen nochmal abklappern
+  l=Labels l=l[0]
+  while(l)
+  {
+    if(l[24]==1)
+    {
+      //Funktionsnamen in die Datei schreiben (incl. L„ngenbezeichner)
+      a=l[4] write(a,a[0]+4)
+
+      //Funktionsoffset in die Datei schreiben, damit sie berall eingebunden werden kann. Dazu alle gesammelten Aufruf-Offsets mit in die Datei schreiben.
+      write(l+28,l[32]*4+8)
+/*
+push(a,x,y,q)
+x=a
+y=l[28]
+FText('%s:%da    %n',@x) z=q PrintK() free(q)
+pop(q,y,x,a)
+*/
+
+    }
+    l=l[0]
+  }
+}
+
+
+
+/*************************************************
+
+  Externe VARIABLEN
+
+  Die Anzahl der Externen Variablen wird zuerst
+  angegeben.
+
+  Danach wird zu jedem Variablennamen evtl. noch
+  eine Liste mit Patchlabels gespeichert, die
+  wieder die Offsets (Heap) angeben und so die
+  relative Adresse im Heap spezifizieren.
+
+  Der Exe/Dll-Loader wird jede Variable finden
+  oder hinzufgen und dann evtl. noch die Patches
+  im Code machen, um immer DS:[xx] vollst„ndig zu
+  machen.
+
+ *************************************************/
+proc VarIntl(0)
+{
+  //Anzahl Variablen-Relozierungen speichern
+  a=Internationals write(@a,4)
+
+  x=Variables x=x[0]
+  while(x)  
+  {
+    if(x[VarInternational])
+    {
+      //Variablennamen in die Datei schreiben (incl. L„ngenbezeichner) Der Loader braucht den Namen, um ihn entweder im Journal zu finden oder neu anzulegen (extern/public-Relation)
+      a=x[4] write(a,a[0]+4)
+
+      //Relativen Heapoffset in der Datei (Diese Datei bekommt vom Loader sp„ter Heap zur Laufzeit zugewiesen)
+      write(x+VarHeap,4)
+/*
+push(a,x,y,q)
+y=x[VarHeap]
+x=a
+FText('var %s:%da    %n',@x) z=q PrintK() free(q)
+pop(q,y,x,a)
+*/
+
+      //Anzahl zu patchender Zugriffe schreiben
+      a=x[VarAccessCnt]
+      write(@a,4)
+
+      //Alle zu patchenden relativen Offsets schreiben
+      if(a) write(x+VarAccessOfs,a*4)
+    }
+    x=x[0]
+  }
+}
+
+
+
+
+//Namen der Zieldatei erstellen ############################
+  if(f==0)||(p==0) exit()
+  free(ProgPath)
+  cd(o) root(@o) FileRoot=o
+  FChangeExt(f,s) Filename=a
+
+//Assemblerdatei laden #####################################
+  cd(p) open(f,ReadMode)
+  size(@s) getmem(a,s+4)
+  a[0]=s read(a+4,s) close()
+  Quelle=a
+
+//Zielpuffer anlegen #######################################
+  getmem(a,s*4+4) a[0]=0
+  Ziel=a
+
+//ASSEMBLERBLOCK šBERSETZEN ################################
+  LocalFlag=0
+  LocalPos=0
+  LocalPatch=0
+  LastPointer=0
+  q=Quelle j=0 Block()
+
+//šBRIGE SPRUNGBEFEHLE PATCHEN #############################
+  JPatch()
+
+//Zieldatei schreiben ######################################
+  z=Ziel if(z[0])
+  {
+    cd(FileRoot) open(Filename,CreateMode)
+    write(Ziel,z[0]+4)
+    Linking()
+    Relocation()
+    VarIntl()
+    close()
+  }
+
+/*
+  if(Outputbufferpos>0)
+  {
+    cd('c:\osag') open('debug.txt',CreateMode) write(Outputbuffer,Outputbufferpos) close()
+  }
+*/
+  free(Outputbuffer)
+
+  Play(4)
+
+//Variablen freigeben ######################################
+  Destroy()
+
+//Ende ASSEMBLY.DLL

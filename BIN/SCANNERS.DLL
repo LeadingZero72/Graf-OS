@@ -1,0 +1,1420 @@
+/****************************************************
+ * Compiler/Assembler Hilfsroutinen
+ * Date: 14.Januar 2016
+ * Author: Alexander Graf
+ ****************************************************/
+
+
+ //Compiler/Assembler-Datensegment
+  private Typedefs    = "24"    //Liste mit Typendefinitionen
+  private Variables   = "28"    //Liste mit Variablen 
+  private Codes       = "32"    //Container mit CPU-Codeklassen/Typen
+  private Functions   = "36"    //Funktions-Deskriptorliste
+  private Labels      = "40"    //Liste mit Labels und Sprungadressen
+  private FileStack   = "44"    //Stapel mit verschachtelt aufgerufenen Pfaden/Dateien (Array of Stringpair)
+  private Defines     = "48"    //Liste mit #define-Konstanten
+
+  private CText       = "64"    //Quelltext
+  private AsmText     = "68"    //Assemblertext
+  private TmpText     = "72"    //Tempor„rer String[1000]
+  private InputPath   = "76"    //Quellpfad
+  private OutputPath  = "80"    //Zielpfad
+  private AppPath     = "84"    //Ausfhrungspfad
+  private Ending      = "88"    //Datei-Endung der Zieldatei
+  private SourceFile  = "92"    //Name der Quelldatei
+  private Platform    = "96"    //Name der Plattformdatei
+  private IncludePath = "100"   //Ordner fr Standard-Bibliothek
+  private TypStack    = "104"   //Stapel mit I_PUSH-Datentypen
+  private TempText    = "108"   //2. Tempor„rstring
+  private OutputFile  = "112"   //Name der Zieldatei
+  private BlockStack  = "116"   //Stapel mit Zeigern auf Startlabel und Endlabel für break/continue
+
+  private HeapCount   = "144"   //Offset im Heap (dient am Ende als Heapgr”áe)
+  private HeapPatch   = "148"   //Output-Zeile fr Getmem-Patch im Assemblercode
+  private CodeLimit   = "152"   //Maximale Assemblertextl„nge
+  private Thesis      = "156"   //Bisherige Anzahl Klammern
+  private LastType    = "160"   //Letzte Typen-ID (Offset in Plattformarrays)
+  private BlockSP     = "164"   //Blockstackpointer
+  private TypSP       = "168"   //Datentypstackpointer
+  private StackLimit  = "172"   //Compilerstackbedarf
+  private TempA       = "176"   //
+  private TempB       = "180"   //
+  private TempC       = "184"   //
+  private TempD       = "g[188]" //
+  private LabelCount  = "192"   //Anzahl Label
+  private BlockCount  = "196"   //Anzahl Anweisungsbl”cke
+  private LocalFlag   = "200"   //Flag: Innerhalb einer Funktion ?
+  private LocalPos    = "204"   //Gr”áe des lokalen Stackframe
+  private WasReturn   = "208"   //Flag: Voriger Befehl war RETxx ? (Dann ist es nicht mehr n”tig, am Ende der Funktion den Return zu coden^^)
+  private MemberCount = "212"   //Anzahl Member (0..n)
+  private StatBCount  = "220"   //Gez„hlte Bl”cke
+  private StatVCount  = "224"   //Gez„hlte Variablen
+  private StatFCount  = "228"   //Gez„hlte Funktionen
+  private StatECount  = "232"   //Gez„hlte Ausdrcke
+  private StatLCount  = "236"   //Gez„hlte Loads
+
+
+
+ //Typdefinitionen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private TypName     = "04"    //Namensstring im Regfeld
+  private TypSize     = "8024"  //Daten/Strukturbreite
+  private TypID       = "8028"  //ID zur Erkennung von Funktionen
+  private TypMask     = "8032"  //Bitmaske (fr einfache typedefs)
+  private TypBits     = "8036"  //Bitposition (fr einfache typedefs)
+  private TypFunc     = "3"     //ID fr Funktionen in der Typliste
+  private TypVar      = "2"     //ID fr Variablen in der Typliste
+  private TypStrukt   = "1"     //ID fr Strukturen in der Typliste
+  private TypVoid     = "4"     //ID fr unbestimmte Datentypen von L-Values
+
+
+ //Strukturen innerhalb der Typedef ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private TypMembers  = "20"    //Anzahl Offset/Namen-Paare
+  private TypMName    = "24"    //Offset der Membernamen
+  private TypMTyp     = "4024"  //Offset der Membergr”áen
+
+ //Struktur fr Variablen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private VarName     = "04"    //Name im Regfeld
+  private VarParam    = "24"    //Parametersubliste
+  private VarType     = "28"    //Zeiger auf Typ-Container
+  private VarInit     = "32"    //Hier: Initialwert bei Variablen
+  private VarID       = "36"    //Zur Unterscheidung von Funktionen und Variablen!
+  private VarDeRefCnt = "40"    //Maximal erlaubte Anzahl der Dereferenzierungen des Zeigers (min. 1 bei Zeigern)
+  private VarFunction = "01"    //'Variable ist eine.Funktion'
+  private VarVariable = "02"    //'                 .normale Variable'
+  private VarStruct   = "04"    //'                 .Struktur'
+
+ //Funktionsparameter innerhalb Funktion (in der Variablenliste) ÄÄÄÄÄÄÄÄÄÄÄ¯
+  private ParName     = "04"    //Parametername
+  private ParType     = "24"    //Parametertyp
+  private ParDeRefCnt = "28"    //Parameter ist als Zeiger definiert
+
+ //Label innerhalb der Labelliste ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private LabName     = "04"    //Labelbezeichner
+  private LabOffset   = "24"    //Offset im "Code"
+
+ //Dateien auf dem Dateistack ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private FS_Filename = "24"    //Dateiname
+  private FS_Path     = "28"    //Pfad
+  private FS_Offset   = "32"    //Leseposition
+
+ //#define-Konstanten ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private DefineName  = "4"     //Name
+  private DefineValue = "24"    //Wert
+
+ //Datentypcodes, so kann fr jeden Datentypen ein anderer CPU-Code passend zur jeweiligen Operation gewählt werden
+  private I_BYTE      = "00"
+  private I_WORD      = "04"
+  private I_DWORD     = "08"
+  private I_FLOAT     = "12"
+  private I_REAL      = "16"
+  private I_MMX       = "20"
+  private I_SSE       = "24"
+  private I_REX       = "28"
+  private I_STRING    = "32"
+
+ //Normale Operationen (Akku erh„lt Zwischenergebnis) ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private I_NEG       = "00"
+  private I_PUSH      = "01"
+  private I_POPADD    = "02"
+  private I_POPSUB    = "03"
+  private I_POPMUL    = "04"
+  private I_POPDIV    = "05"
+  private I_POPPOT    = "06"
+  private I_STORE     = "07"
+  private I_LOAD      = "08"
+  private I_LITERAL   = "09"
+  private I_CALL      = "10"
+  private I_STOREADD  = "11"
+  private I_STORESUB  = "12"
+  private I_STOREMUL  = "13"
+  private I_STOREDIV  = "14"
+  private I_STOREAND  = "15"
+  private I_STOREOR   = "16"
+  private I_STOREXOR  = "17"
+  private I_STOREMOD  = "18"
+  private I_POPMOD    = "19"
+  private I_POPSHL    = "20"
+  private I_POPSHR    = "21"
+  private I_POPLAND   = "22"
+  private I_POPLOR    = "23"
+  private I_PUSHPAR   = "24"
+  private I_JNE       = "25"
+  private I_JE        = "26"
+  private I_JMP       = "27"
+  private I_TEMP      = "28"
+  private I_CMPNE     = "29"
+  private I_PLPL      = "30"
+  private I_PLMO      = "31"
+  private I_MIMI      = "32"
+  private I_MIMO      = "33"
+  private I_PREPLPL   = "34"
+  private I_PREMIMI   = "35"
+  private I_PREPLMO   = "36"
+  private I_PREMIMO   = "37"
+  private I_ZERO      = "38"
+  private I_NOT       = "39"
+  private I_POPAND    = "40"
+  private I_POPOR     = "41"
+  private I_POPXOR    = "42"
+
+ //Vergleiche (Akku wird 0 oder 1) ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  private I_POPEQ     = "58"
+  private I_POPNE     = "59"
+  private I_POPGE     = "60"
+  private I_POPLE     = "61"
+  private I_POPGG     = "62"
+  private I_POPLL     = "63"
+
+
+ /*TYPENUMWANDLUNGEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+   Fr alle Grunddatentypen gibt es Codes, die zur Konvertierung
+   mit in den Output geschrieben werden.
+ */
+  private T_BYTE      = "64"
+  private T_WORD      = "65"
+  private T_DWORD     = "66"
+  private T_FLOAT     = "67"
+  private T_REAL      = "68"
+
+  private T_LOADP     = "69"
+  private I_STORP     = "70"
+
+
+
+
+/*proc Bail() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  Verl„át das Programm und fllt die Rckgabe mit Daten.
+  Darin sind z.B. die aktuelle Quellzeilennummer, die Fehlernummer,
+  die Outputdatei wird geschrieben und die Hilfsbibliothek wird
+  freigegeben.
+*/
+proc Bail(1)
+{
+  pop(a) h[0]=a[0]            //Fehlernummer
+  q[0]=j Count(q) h[4]=a      //Quellzeile ausz„hlen 
+  strcpy(g[SourceFile],h+8)   //Quelldatei angeben
+  SaveFile()                  //Output trotzdem speichern
+  exit()                      //Programm verlassen...
+}
+
+//CopyLineCRLF() Kopiert den Rest der Zeile und h„ngt CRLF an, um in eine neue Zeile zu zwingen
+proc CopyLineCRLF(0)
+{
+  push(a,c) if(j-4>=q[0]) Bail(6)
+  while(1==1)
+  {
+    c=q[j]Char 
+    if(c==0) break;
+    if(c==13)
+    {
+      if(q[j+1] Char==10) j=j+2 break; 
+      j=j+1 break;
+    }
+    u[v]=bptr c v=v+1 j=j+1
+    if(j-4>=q[0]) break; Bail(7)
+  }
+  pop(c,a)
+}
+
+//SkipSpaces() šberspringt dazwischenliegende Leerzeichen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc SkipSpaces(0)                                            //
+{                                                             //
+  push(a)
+  while(1)                                                    //Fr alle Zeichen
+  {                                                           //
+    //<End of file>-Fehler testen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(j-4>=q[0]) break; //Bail(2)                                     //Solange kein šberlauf
+
+    //Leerzeichen auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Char==32) j=j+1 continue;                         //oder noch Leerzeichen
+
+    //Crlf auslassen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(q[j]Integer==0x0a0d) j=j+2 continue;                  //und noch Crlf
+
+    break;                                                    //ansonsten fertig...
+  }                                                           //
+  pop(a)
+}                                                             //
+
+//Count(String) -> A= Anzahl Zeilen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Count(1)
+{
+  pop(a) push(b,c) c=a[0]
+  b=4 a=1
+  while(b<c[0])
+  {
+    if(c[b] Integer==0x0a0d) a=a+1 b=b+1
+    b=b+1
+  }
+  pop(c,b)
+}
+
+//Find(String) -> A=true/false ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Find(1)
+{
+  SkipSpaces()                         //Leerzeichen auslassen
+  pop(a) a=a[0]                        //Parameterstring, nur 1 Char
+  if(q[j]Char==a[4] Char) a=1          //Zeichen bereinstimmend
+  else a=0                             //oder A=0..
+}
+
+//Need(String) Nur 1 Char gesucht ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Need(1)
+{
+  SkipSpaces()                         //Leerzeichen auslassen
+  pop(a) a=a[0]                        //Parameterstring, nur 1 Char lang
+  if(q[j]Char!=a[4]Char) Bail(9)       //Zeichen richtig oder Syntaxerror ?
+  j=j+1                                //1 Zeichen auslassen
+}
+
+//Put(CpuCodeString,Formatdataarray) Schreibt die L”sung in den Assemblertext
+proc Put(2)
+{
+  pop(a) push(q)            //(Compilerregister retten)
+  FText(a[0],a[4])          //Assemblertext formatieren
+  copy(q+4,u+v,q[0])        //Bytes in Zielstring kopieren
+  v=v+q[0] free(q) pop(q)   //Zeiger auf Ziel weiter, Stack aufräumen und Puffer freigeben
+
+//  Play(2)
+//  SaveFile()
+//  wait(0)
+}
+
+/********************************************************************
+ * GENERELLE SUCHE NACH AUSDRšCKEN IM QUELLCODE                     *
+ *                                                                  *
+ * Ausdrcke werden gescannt, indem nach Trennzeichen gesucht wird. *
+ * Solange die Zeichen im Bereich von a-zA-Z0-9_# liegen, wird es   *
+ * ein Name sein, sei es auch der #define-Ausdruck. Es wird ein     *
+ * neuer String erzeugt und in A zurckgegeben.                     *
+ ********************************************************************/
+proc Scan(0)
+{
+  SkipSpaces()
+  push(c,d,e) d=0 e=j                   //Nicht J, sondern E nehmen,
+  while(1)                              //um Quelle nur zu durchsuchen
+  {                                     //
+    c=q[e] Char a=0                     //(Annehmen, daá Abbruchkriterium erreicht)
+    if(c>=97)&&(c<=122) a=1 //a-z       //Wenn a-z, dann noch gltiges Zeichen
+    if(c>=65)&&(c<=90)  a=1 //A-Z       //oder wenn A-Z
+    if(c>=48)&&(c<=57)  a=1 //0-9       //oder 0-9
+    if(c==35)||(c==95)  a=1 //# und _   //oder # oder _, dann gilts noch.
+    if(c==39)           a=1
+    if(a==0) break;                     //Andernfalls keine Zeichen mehr..
+    e=e+1 d=d+1 if(e-4>q[0]) Bail(10)   //Zeiger/Z„hler weiter..
+  }                                     //
+  if(d==0) Bail(11)                     //Wenn keine Zeichen, Syntaxfehler !
+  a=g[TmpText] a[0]=d copy(q+j,a+4,d)   //Zielstring kopieren
+  j=j+d                                 //J weiter setzen, da Name gefunden
+  pop(e,d,c)                            //Stack aufr„umen..
+  SkipSpaces()
+}
+
+
+
+/*********************************************************************
+ * Number(QString) -> A=Binary number                                *
+ * Konvertiert QString in einen bin„ren Ausdruck.                    *
+ * Es drfen dezimale, hexadezimale (groá/klein) und bin„re Eingaben *
+ * gemacht werden. Zur Unterscheidung gilt das typische 0x/0b...     *
+ *********************************************************************/
+proc Number(1)
+{
+  pop(a) push(b,c,d,e) e=a[0] c=e[0]             //String in E
+  if(e[4]Char<48)||(e[4]Char>57) Bail(12)        //Falls keine Zahl, Syntaxfehler..
+  while(1)                                       //Fr alle M”glichen Formate:
+  {
+    //Hexadezimale Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(e[4]Integer==0x7830)&&(c>1)               //Beginnt mit "0x" ? Dann hexadezimal:
+    {                                            //
+      c=c-2 if(c<1)||(c>8) Bail(13)              //Korrekte Anzahl Nibble ?
+      d=2 a=0 c=c-1>>2 c=1>>c                    //Welches Nibble als Start ?
+      while(d<e[0])                              //Fr alle Nibble:
+      {                                          //
+        b=e[d+4] Char                            //Nibble aus Quelltext
+        if(b>=48)&&(b<=57)  a=b-48*c+a d=d+1 c=c<<4 continue; //Entweder Digit,
+        if(b>=65)&&(b<=70)  a=b-55*c+a d=d+1 c=c<<4 continue; //groáe Pseudotetraden
+        if(b>=97)&&(b<=102) a=b-87*c+a d=d+1 c=c<<4 continue; //oder kleine halt^^
+        Bail(14)                                 //Evtl. Syntaxfehler...
+      }                                          //
+      break;                                     //Ergebnis in A...
+    }
+    //Bin„re Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    if(e[4] Integer==0x6230)&&(c>1)              //Beginnt mit "0b" ? Dann hexadezimal:
+    {                                            //
+      c=c-2 if(c<1)||(c>32) Bail(15)             //Zwei Zeichen abziehen
+      d=2 a=0 c=c-1 c=1>>c                       //Jede Stelle enth„lt nur 1 Bit
+      while(d<e[0])                              //Fr alle Bits:
+      {                                          //
+        b=e[d+4]Char-48 if(b==0)||(b==1) a=b*c+a //Stellenbetrag addieren
+        else Bail(16)                            //(oder Syntaxfehler)
+        d=d+1 c=c<<1                             //N„chste Stelle maskieren
+      }                                          //
+      break;                                     //Ergebnis in A...
+    }
+    //Default: Dezimale Eingabe ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    a=c-1 c=1                                           //H”chste 10er-Potenz in
+    if(a) c=c*10 a=a-1 repeat                           //einer Schleife vorberechnen
+    a=0 d=0                                             //Beginne bei "0"
+    if(d<e[0]) a=e[d+4] Char-48*c+a d=d+1 c=c/10 repeat //Stellenbetr„ge addieren
+    break;                                              //Ergebnis in A...
+  }
+  pop(e,d,c,b)
+}
+
+
+
+
+
+
+/**************************************************************************
+ * COMPILER/ASSEMBLER INITIALISIEREN                                      *
+ *                                                                        *
+ * Hier wird das Datensegment erzeugt, die Quelldatei geladen             *
+ * und die Listen/Arrays initialisiert.                                   *
+ * ScannerInit()                                                          *
+ * šbergabe: f,p,o,s,r,t = Quelldatei,Quellpfad,Zielpfad,Endung,Plattform *
+ * Arbeitsverzeichnis                                                     *
+ **************************************************************************/
+proc InitScanner(0)
+{
+  a=Program append(10,20,1000,a[DXCameras],@g)
+  blast(g+24+40,80,0)
+  g[InputPath]=p
+  g[OutputPath]=o
+  g[SourceFile]=f
+  g[Ending]=s
+  g[AppPath]=r
+  g[Platform]=t
+  FChangeExt(f,s) g[OutputFile]=a
+//  cd(r,'..\INCLUDE') root(g+IncludePath)
+  cd('C:\OSAG\INCLUDE') root(g+IncludePath)
+  getmem(a,1004) g[TmpText]=a
+  getmem(a,1004) g[TempText]=a
+  g[CodeLimit]=1000000
+  g[StackLimit]=256
+  getmem(u,g[CodeLimit]) v=4 g[AsmText]=u
+  cd(g[AppPath],'PLATFORM') call(g[Platform]) g=g
+  getmem(a,g[StackLimit]) g[TypStack]=a g[TypSP]=0
+  getmem(a,g[StackLimit]) g[BlockStack]=a g[BlockSP]=0
+  g[HeapCount]=0
+  g[LabelCount]=0
+  g[BlockCount]=0
+  g[LocalFlag]=0
+  g[StatBCount]=0
+  g[StatVCount]=0
+  g[StatFCount]=0
+  g[StatECount]=0
+  g[StatLCount]=0
+  LoadFile()
+}
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                   MULTIFILE-STACKSYSTEM                      ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                                              ³
+       ³                                                              ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+
+//SaveFile() Zieldatei speichern ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc SaveFile(0)
+{
+  if(v==4) Bail(17)                                 //!!Output darf nicht leer sein!!
+  cd(g[OutputPath])                                 //Zielordner setzen
+  open(g[OutputFile],CreateMode)                    //Daten schreiben
+  write(u+4,v-4) close()                            //und schliessen.
+}
+
+//PushSource(Pfad,Datei) Dateihierachie vertiefen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc PushSource(2)
+{
+  pop(a) push(b,f,p) p=a[0] f=a[4]                  //Pfad und Dateiname der neuen Datei in P/F
+  append(0,2,4,g[FileStack],@b)                     //Neuen Container im Dateistack erzeugen 
+  strcpy(g[SourceFile],b+FS_Filename)               //Dateinamen, sowie 
+  strcpy(g[InputPath],b+FS_Path)                    //Pfad und
+  b[FS_Offset]=j                                    //Offset speichern
+  free(q,g[InputPath],g[SourceFile])                //Alten Quelltext freigeben  
+  strcpy(p,g+InputPath)                             //(Paradoxon: Wenn P auf g[InputPath] zeigt, dann wird P quasi gel”scht und noch fr strcpy benutzt, welcher m”glicherweise denselben Chip reserviert und dann den String mit sich selbst berschreibt ;-)
+  strcpy(f,g+SourceFile)                            //
+  LoadFile() j=5                                    //Neuen Quellcode laden
+  pop(p,f,b)                                        //()
+}
+
+//PopSource() Dateihierachie aufsteigen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc PopSource(0)
+{
+  push(b) b=g[FileStack]                    //Sind noch Dateien brig ?
+  if(b[0]==0) Bail(0)                       //Wenn nicht, COMPILER FERTIG !!!
+  b=b[8]                                    //Oberstes Element nehmen, zwischenwertige Daten freigeben
+  free(q,g[InputPath],g[SourceFile])        //Alten Quelltext freigeben  
+  g[SourceFile]=b[FS_Filename]              //Dateiname, Pfad und Offset in 
+  g[InputPath]=b[FS_Path]                   //Compilervariablen (Geschenke wieder abholen),
+  LoadFile() j=b[FS_Offset]                 //unterbrochene Datei zur Forsetzung laden
+  b[FS_Filename]=0 b[FS_Path]=0 clear(b)    //Stack-Container freigeben, Daten werden indies verschenkt.
+  pop(b)                                    //()
+}
+
+//LoadFile() Datei laden ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc LoadFile(0)
+{
+  push(b) cd(g[InputPath])                   //Quellpfad setzen
+
+  //Dateinamen fr Quanshow.dll kopieren
+  a=g[SourceFile]
+  b=h[16]
+  copy(a+4,b+4,a[0]) b[0]=a[0]
+
+  open(g[SourceFile],ReadMode) size(@a)      //Quelldatei ”ffnen und L„nge in A
+  getmem(q,a+4+2) read(q+5,a)                //Quelltextspeicher reservieren und einlesen
+  q[4]=bptr 123 q[a+5]=bptr 0                //Klammern werden fr Block() gebraucht!
+  close() q[0]=a+2 j=4 g[CText]=q pop(b)     //Quelldatei schlieáen
+}
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                               ³
+       ³      VARIABLE / STRUKTURELEMENTE LEXEN        ³
+       ³                                               ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                               ³
+       ³ Der Variablenname und sein Typ werden erstmal ³
+       ³ kopiert und bernommen.                       ³
+       ³                                               ³
+       ³ Solange noch Punkte folgen, werden alle Punkte³
+       ³ und Membernamen weiter an den String angeh„ngt³
+       ³                                               ³
+       ³ Zwischendurch wird geprft, ob der Membername ³
+       ³ in der Struktur berhaupt existiert.          ³
+       ³                                               ³
+       ³ Im Grunde darf nur dann ein weiterer Punkt    ³
+       ³ folgen, wenn das letzte Member ebenfalls eine ³
+       ³ Struktur ist.                                 ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+//MVerify(TypedefStruct,NameOfElement) -> A= Typ des Strukturelements oder NULL
+proc MVerify(0)
+{
+  b=g[LastType] if(b[TypID]!=TypStrukt) Bail(35) //!!Wenn Elementnamen folgen, muss es eine Struktur gewesen sein!!
+  c=b[TypMembers] if(c==0) Bail(28)              //!!Es muá Elemente geben!!
+  while(c)                                       //Fr alle hier registrierten Elementnamen
+  {                                              //
+    StrCmp(b[TypMName],g[TmpText]) if(a) break;  //Membername passt ?
+    b=b+4 c=c-1                                  //
+  }                                              //
+  if(a==0) Bail(29)                              //!!Der Membername muá in dieser Struktur auch tats„chlich existieren!!
+  g[LastType]=b[TypMTyp]                         //Datentyp neu, hat sich evtl. ge„ndert
+  MPut(g[TmpText])                               //Element -> TmpText
+}
+
+
+//MPut(StringMembername) ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc MPut(1)
+{
+  pop(a) b=a[0]                  //"Scan()"-Wert oder '.'
+  c=g[TempText]                  //Zielstring fr Struktur+Elementnamen
+  copy(b+4,c[0]+c+4,b[0])        //Zielstring erg„nzen
+  c[0]=c[0]+b[0]                 //neue L„nge speichern
+}
+
+/*****************************************************************
+  MCollect()
+
+  Hier wird der komplette Variablenname gecheckt, sei es auch
+  eine Reihe aus Strukturelementen. Die Elemente werden anhand
+  des Basistyps gesucht und bei weiteren Strukturen der Basistyp
+  geupdatet, damit weitere Elemente gefunden werden k”nnen.
+  Der Elementtyp ersetzt dann den Basistyp und wird zum coden
+  der Assembleranweisung benutzt.
+  Dereferenzierungen werden vom Compiler kaum behandelt. Dafr
+  ist wieder der Assembler zust„ndig. Der Compiler muá nur die
+  Sternchen und Pfeile mitkopieren.
+
+  Alle Member werden durchlaufen und mit den dazwischenliegenden
+  Punkten in <TempText> kopiert.
+
+  Bei der bergebenen Variable kann es sich auch um eine
+  ganz schlichte Variable handeln. MCollec sorgt nur dafr,
+  daá die Membernamen und der Datentyp des letzten Members
+  in der Kette zurckgegeben wird.
+
+ *****************************************************************/
+proc MCollect(0)
+{
+  //Memberstring initialisieren
+  push(b,c) a=g[TempText] a[0]=0
+
+  //Bisher noch keine Member gez„hlt (Eventuell nur der Strukturname ohne Member als Base)
+  g[MemberCount]=0
+
+  //Variablennamen als ersten kopieren
+  MPut(g[TmpText])
+
+  //Alle weiteren Punkte geben einen Membernamen
+  while(q[j]Char==46)
+  {
+    j=j+1 MPut('.') Scan() MVerify()
+    g[MemberCount]=g[MemberCount]+1
+  }
+
+  //Eckige Klammern fr noch mehr "Offset" ?
+  if(q[j]Char==91)
+  {
+    j=j+1
+    MPut('[')
+
+    Scan() Number(g[TmpText])
+
+    Need(']') MPut(g[TmpText]) MPut(']')
+  }
+
+
+  pop(c,b)
+}
+
+
+/*     .                                                              .
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                               ³
+       ³               TYPENUMWANDLUNGEN               ³
+       ³                                               ³
+ ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+       ³                                               ³
+       ³ Beim Coden jeder Anweisung muá der Datentyp   ³
+       ³ beachtet werden.                              ³
+       ³                                               ³
+       ³ Der Datentyp dient zur Auswahl der Mnemonics  ³
+       ³ im Intructionset.                             ³
+       ³                                               ³
+       ³ Wird ein PUSH ausgefhrt, soll zudem der      ³
+       ³ Datentyp auf dem Typenstack abgelegt werden,  ³
+       ³ da die einzelnen Atome unterschiedlich sein   ³
+       ³ k”nnen.                                       ³
+       ³                                               ³
+       ³ Bei einer POP-Operation wird der alte Typ vom ³
+       ³ Stapel geholt. Sind beide Datentypen gleich,  ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ³                                               ³
+       ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+
+
+//TPush() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc TPush(0)
+{
+  a=g[TypStack]+g[TypSP] a[0]=g[LastType] 
+  g[TypSP]=g[TypSP]+4 if(g[TypSP]>=g[StackLimit]) Bail(32)
+}
+
+//TPop() -> A=Datentyp ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc TPop(0)
+{
+  push(b) b=g[TypSP]-4 if(b<0) Bail(33)
+  a=g[TypStack] a=a[b] g[LastType]=a g[TypSP]=b pop(b)
+}
+
+//TEval() -> A=Klassenarray-Bytebreite von <LastType> ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc TEval(0)
+{
+  a=g[LastType]
+
+//  if(a[TypID]==TypStrukt) a=8
+//  else a=a[TypSize]<<1>>2
+  a=a[TypSize]<<1>>2
+}
+
+//TAdopt(InstructionClass) Fgt eventuelle Typenumwandlungscodes in den Output ein und beachtet VOID-Zeiger, wenn an eine leere Strukturvariable dereferenziert zugewiesen wird.
+proc TAdopt(1)
+{
+  pop(a) push(b,i,j) b=a[0] j=0
+
+  TEval() i=a
+
+  if(b==I_PUSH) TPush()
+
+  if(b==I_POPADD)||(b==I_POPSUB)||(b==I_POPMUL)||(b==I_POPDIV)||(b==I_POPMOD)||(b==I_STORE)||(b==I_STOREADD)||(b==I_STORESUB)||(b==I_STOREMUL)||(b==I_STOREDIV)||(b==I_STOREAND)||(b==I_STOREOR)||(b==I_STOREXOR)||(b==I_STOREMOD)||(b==I_POPSHL)||(b==I_POPSHR)||(b==I_POPEQ)||(b==I_POPNE)||(b==I_POPGE)||(b==I_POPLE)||(b==I_POPGG)||(b==I_POPLL)||(b==I_POPLAND)||(b==I_POPLOR)||(b==I_POPAND)||(b==I_POPOR)||(b==I_POPXOR)
+  {
+    //Datentyp des L-Values vom Stack holen
+    TPop() TEval() j=a
+
+    //Zuweisung an VOID? Dann Quelltyp nehmen
+    if(g[LastType]==TypVoid) j=i
+
+    //Bei ungleichen Typen werden Umwandlungscodes generiert
+    if(i!=j)
+    {
+      if(j==I_BYTE)  a=T_BYTE
+      if(j==I_WORD)  a=T_WORD
+      if(j==I_DWORD) a=T_DWORD
+      b=g[Codes] b=b[0] b=a*64+i+24+b
+      if(b[0]) Put(b[0],0)
+      i=j
+    }
+  }
+  a=i pop(j,i,b)
+}
+
+//TCompare(T1,T2) Fgt eventuelle Typenumwandlungscodes in den Output ein und beachtet VOID-Zeiger, wenn an eine leere Strukturvariable dereferenziert zugewiesen wird.
+proc TCompare(2)
+{
+  pop(a) push(i,j)
+
+  i=a[0]
+//  if(i[TypID]==TypStrukt) i=8
+//  else i=i[TypSize]<<1>>2
+  i=i[TypSize]<<1>>2
+
+
+  j=a[4]
+//  if(j[TypID]==TypStrukt) j=8
+//  else j=j[TypSize]<<1>>2
+  j=j[TypSize]<<1>>2
+
+
+
+
+  //Bei ungleichen Typen werden Umwandlungscodes generiert
+  if(i!=j)
+  {
+    if(j==I_BYTE)  g[LastType]=a[4] a=T_BYTE
+    if(j==I_WORD)  g[LastType]=a[4] a=T_WORD
+    if(j==I_DWORD) g[LastType]=a[4] a=T_DWORD
+    j=g[Codes] j=j[0] j=a*64+i+24+j
+    if(j[0]) Put(j[0],0)
+  }
+  pop(j,i)
+}
+
+
+
+
+//TBool() Setzt Byte-Datentyp auf Zwischenergebnis
+proc Bool(0)
+{
+  a=g[Typedefs] g[LastType]=a[0]
+}
+
+
+/*******************************************************************
+ *                                                                 *
+ * REKURSIV ABSTEIGENDER AUSDRUCK-PARSER                           *
+ *                                                                 *
+ *******************************************************************/
+//Code(InstructionClass,FormatDataarray) ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Code(2)                                 //W„hlt die typenabh„ngigen CPU-Codes fr die jeweilige Operation aus.
+{                                            //šbergeben wird die Operations-Klassennummer
+  pop(a) push(b,c) c=a                       //
+  TAdopt(c[0])                               //Bei PUSH/POPxxx/STORE-Operationen Typen behandeln (bei POPxxx evtl. Typenumwandlung einfgen)
+  b=g[Codes] b=b[0] b=c[0]*64+a+24+b         //Daraus wird je nach Datentyp ein anderer Offset
+  if(b[0]) Put(b[0],c[4])                    //Nur wenn Assembercode hinterlegt ist, diesen in den Output schreiben
+  pop(c,b)                                   //
+}                                            //..
+
+
+
+
+/*      .                                                              .
+  ®ÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄ¯
+        ³                           Load()                             ³
+        ³ L„dt das n„chste Literal/Struktur(el)/Variable oder Funktion,³
+        ³ speichert dessen Type in g[LastType] und sorgt dafr, dass   ³
+        ³ die Codes zum laden des Akku in die Assemblerdatei kommen.   ³
+        ³ Anschliessend wird g[LastType] auf den Datentyp des Atoms    ³
+        ³ gesetzt, da der Akku zum weiterrechnen interessant ist.      ³
+        ³ - Testet auf pre++/-- beliebig oft mit 10x Vorzeichenwechsel ³
+        ³ - Testet auf Dereferenzierungen beliebig oft                 ³
+        ³ - Scannt einen Ausdruck und entscheidet, ob Literal, Type,   ³
+        ³   Funktion, Variable/Struktur.                               ³
+        ³ - Zeiger werden geloadet, der Datentyp in DWORD ge„ndert.    ³
+        ³ - Dereferenzierungen werden hinterher sooft wie n”tig gecodet³
+        ³ - Post++/-- beliebig oft mit 10 Vorzeichenwechsel            ³
+        ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ    */
+proc Load(0)
+{
+  push(b,c,e,n,x,y) SkipSpaces()
+  g[StatLCount]=g[StatLCount]+1
+
+
+  //Ist es ein String ?
+  if(q[j]Char==39)
+  {
+    //String tempor„r scannen
+    j=j+1 b=g[TmpText] b[0]=0
+    SkipSpaces()
+
+    //Der Code ist jetzt verflucht und muá umge„ndert werden, damit eine Adresse an einen Zeiger zugewiesen wird und der String in eine funktionsabh„ngige Liste summiert wird, welche dann am Funktionsende in die Assemblerdatei kopiert wird.
+    i=0
+    while(q[j]Char!=39)
+    {
+      b[i+4]=bptr q[j]
+      i=i+1
+      j=j+1
+    }
+    //Abschlieáendes Hochkomma berspringen und Textl„ngenbeschreiber speichern
+    b[0]=i j=j+1
+    if(b==0) Bail(333)
+
+    //Lade <Wert> in 32-Bit-AKKU
+    x=g[TmpText]
+//    Put('%t4mov eax,%"%s%"%n',@x)
+//DEBUG, UM DIE COMPILER ANZUGLEICHEN
+    Put('%t4mov eax,%"',0)
+    copy(x+4,u+v,x[0])
+    v=v+x[0]
+    Put('%"%n',0)
+//DEBUG ENDE
+
+    pop(y,x,n,e,c,b) return()
+  }
+
+
+
+  //'++C'/'--C' BEACHTEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  b=10 x=0
+  b=b-1 while(b)
+  {
+    if(q[j]Integer==0x2b2b) j=j+2 x=x+1 repeat
+    if(q[j]Integer==0x2d2d) j=j+2 x=x-1 repeat
+  }
+
+  //'*' BEACHTEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  SkipSpaces() y=0
+  if(q[j]Char==42) j=j+1 y=y+1 repeat
+
+  //<WERT> LADEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  Scan()
+  while(1)
+  {
+    //LITERAL ERKENNEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    a=a[4]Char if(a>=48)&&(a<=57)
+    {
+      if(x) Bail(48)
+      if(y) Bail(49)
+      Number(g[TmpText])
+      while(1)
+      {
+        if(a==0) Code(I_ZERO,0) break;
+        Code(I_LITERAL,g+TmpText) break;
+      }
+      break;
+    }
+
+    //KONSTANTE ERKENNEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    find(g[Defines],g[TmpText],@b) if(b)
+    {
+      Code(I_LITERAL,g+TmpText) break;
+    }
+
+    //VARIABLE INLINE ERSTELLEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    find(g[Typedefs],g[TmpText],@b) if(b)
+    {
+      if(y) Bail(50)
+      SkipSpaces() e=0
+      if(q[j] Char==42) j=j+1 e=e+1 repeat
+      Scan()
+      append(1,0,100,g[Variables],@c)
+      strcpy(g[TmpText],c+VarName)
+      c[VarType]=b
+      c[VarID]=VarVariable
+      c[VarDeRefCnt]=e
+      if(e) g[HeapCount]=g[HeapCount]+8]
+      else  g[HeapCount]=g[HeapCount]+b[TypSize]
+    }
+
+/*
+  Funktionen werden als Variablen geführt.
+
+  Damit ist der Name der Funktion gemeint.
+
+  So kann eine Funktion auch als R-Value eingesetzt werden und
+  ein Funktionsergebnis zurückliefern.
+
+
+
+*/
+
+    //VARIABLE SCANNEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    find(g[Variables],g[TmpText],@b) if(b)
+    {
+      //FUNKTIONSAUFRUF MACHEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      if(b[VarID]==VarFunction)
+      {
+        a=b[VarType] push(a)
+        Need('(') c=b[VarParam] c=c[0]
+        Find(')') if(a==0)
+        {
+          if(c==0) Bail(44)
+          while(1)
+          {
+            //Die šbergabe wird auf den Parametertypen hin erarbeitet
+            g[LastType]=c[ParType]
+            Expression()
+
+            //Bei normalen Variablen muá der Datentyp der šbergabe angeglichen werden.
+            if(c[ParDeRefCnt]==0)
+            {
+              TCompare(g[LastType],c[ParType])
+            }
+
+//            g[LastType]=c[ParType]
+
+            //Wenn ein Zeiger erwartet wird, dann immer DWORD
+            if(c[ParDeRefCnt]) Pointer()
+
+            //Entweder <push ax> oder <push eax>
+            Code(I_PUSHPAR,0)
+
+            Find(',') if(a==0) break;
+            j=j+1 SkipSpaces() c=c[0] if(c==0) Bail(43)
+          }
+        }
+        Code(I_CALL,b+VarName) Need(')') pop(a) g[LastType]=a break;
+      }
+
+      //VARIABLE LADEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      g[LastType]=b[VarType]
+      MCollect()
+
+      //Member, die Strukturen darstellen, drfen nur als Pointer verwendet werden <3
+      a=g[LastType]
+      if(a[TypID]==TypStrukt) Pointer()
+
+      //Zum laden entweder Pointer als DWORD oder Sternchen kopieren
+      if(b[VarDeRefCnt])&&(y==0) Pointer()
+      if(b[VarDeRefCnt])&&(y)
+      {
+        a=g[TmpText] b=g[TempText]
+        copy(b,a,b[0]+4) b[0]=b[0]+y
+        if(y) b[4]=bptr 42 b=b+1 y=y-1 repeat
+        copy(a+4,b+4,a[0])
+      }
+
+      while(1)
+      {
+        g[TempA]=g[TempText]
+        g[TempB]=g[TempText]
+        if(x==0)  Code(I_LOAD   ,g+TempText) break;
+        if(x==1)  Code(I_PREPLPL,g+TempA)    break;
+        if(x==-1) Code(I_PREMIMI,g+TempA)    break;
+        g[TempB]=x
+        g[TempC]=g[TempText]
+        if(x>1)   Code(I_PREPLMO,g+TempA)    break;
+        if(x<-1)  Code(I_PREMIMO,g+TempA)    break;
+      }
+
+      //'C++'/'C--' BEACHTEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+      b=10 x=0
+      b=b-1 while(b)
+      {
+        if(q[j]Integer==0x2b2b) j=j+2 x=x+1 repeat
+        if(q[j]Integer==0x2d2d) j=j+2 x=x-1 repeat
+      }
+      g[TempA]=g[TempText]
+      g[TempB]=x
+      if(x) Code(I_PLMO,g+TempA) break;
+      break;
+    }
+    Bail(27)
+  }
+  pop(y,x,n,e,c,b)
+}
+
+//Rangfolge der Operatoren:
+//1. Klammern
+//2. And/Or/Xor-Ketten
+//3. Schiebeoperationen
+//4. Potenzen
+//5. Faktoren
+//6. Summanden
+//7. Vergleiche
+
+//Atom() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Atom(0)
+{
+  push(n) n=0 SkipSpaces()
+
+  //Vorzeichen vor Klammer oder Arg behandeln
+  if(q[j]Char==45)&&(q[j]Integer!=0x2d2d) n=1 j=j+1
+
+  //'+'-Plus ist ebenfalls m”glich, aber Vorsicht vor eventuellem ++C/--C)
+  if(q[j]Char==43)&&(q[j]Integer!=0x2b2b)     j=j+1
+
+  SkipSpaces()
+  while(1)
+  {
+    if(q[j]Char!=40) Load() break;
+    j=j+1 g[Thesis]=g[Thesis]+1
+    Equates()
+    if(q[j]Char!=41) Bail(25)
+    j=j+1
+    g[Thesis]=g[Thesis]-1
+    break;
+  }
+  if(n) Code(I_NEG,0)
+  pop(n)
+}
+
+
+//Bitops() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+/*
+  Bitoperationen direkt am Geschehen...
+
+  Es sind masken und maskierungen fr Werte (selten Konstanten)
+  also eher Variablen. Dazu geh”ren &, |, und $.
+
+  Equates holt das L-Value, folgt eines der Symbole und aber
+  kein '=' (Zuweisungsoperator), Wird ein weiteres Atom besorgt,
+  welches dann als R-Value mit der entsprechend kodierten
+  Assembleranweisung berechnet wird.
+
+  Daraus k”nnen ganze Ketten berechnet werden und darum
+  geschieht es in einer Schleife.
+*/
+proc BitOps(0)
+{
+  push(o,p)
+  Atom()
+  SkipSpaces()
+
+  p=q[j]Char while(p==38)||(p==124)||(p==36)
+  {
+    o=q[j+1]Char
+    if(o==61)||(o==38)||(o==124)||(o==36) break;
+    Code(I_PUSH,0) j=j+1 Atom() SkipSpaces()
+    if(p==38)  Code(I_POPAND,0) continue;
+    if(p==124) Code(I_POPOR ,0) continue;
+    if(p==36)  Code(I_POPXOR,0) continue;
+  }
+  pop(p,o)
+}
+
+
+/*
+
+  Die Logikteile befinden sich immer auáerhalb einer Klammer!
+
+  Wenn Atom fertig wird und nachdem die Klammer bersprungen
+  wurde, drfte hier also das && oder || auftauchen und es
+  werden dann evtl. ganze Ketten von Atomen logisch verknpft.
+
+*/
+//Logicals() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Logicals(0)
+{
+  push(o) BitOps()
+  while(1)
+  {
+    SkipSpaces() o=q[j]Integer
+    if(o==0x2626)||(o==0x7c7c)
+    {
+      j=j+2
+      Bool()
+      Code(I_PUSH,0)
+      BitOps()
+      if(o==0x2626) Bool() Code(I_POPLAND,0) continue;
+      if(o==0x7c7c) Bool() Code(I_POPLOR,0)  continue;
+    }
+    break;
+  }
+  pop(o)
+}
+
+//Shifting() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Shifting(0)
+{
+  push(o)
+  Logicals()
+  while(1)
+  {
+    SkipSpaces() o=q[j]Integer
+    if(o==0x3c3c)||(o==0x3e3e)
+    {
+      j=j+2
+      Code(I_PUSH,0)
+      Logicals()
+      if(o==0x3c3c) Code(I_POPSHL,0) continue;
+      if(o==0x3e3e) Code(I_POPSHR,0) continue;
+    }
+    break;
+  }
+  pop(o)
+}
+
+//Potences() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Potences(0)
+{
+  Shifting()
+  SkipSpaces()
+  if(q[j]Char==94)
+  {
+    j=j+1       Code(I_PUSH,  0)
+    Shifting()  Code(I_POPPOT,0)
+  }
+}
+
+//Factors() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Factors(0)
+{
+  push(o,p)
+  Potences()
+  while(1)
+  {
+    SkipSpaces() o=q[j]Char p=q[j+1]Char
+
+    //Wenn * oder / oder %, Faktor gefunden
+    if(o==47)||(o==42)||(o==37)
+    {
+      if(p==47)||(p==42) break;
+      j=j+1
+      Code(I_PUSH,0)
+      Potences()
+
+      /*
+        Die Multiplikation ist ein Sonderfall, da hier der Datentyp
+        ver„ndert wird. Aus Short wird Int und aus Int wird Long.
+      */
+      if(o==42)
+      {
+        Code(I_POPMUL,0)
+        while(1)
+        {
+          a=g[Typedefs] 
+          a=a[0] if(g[LastType]==a) g[LastType]=a[0] break;
+          a=a[0] if(g[LastType]==a) g[LastType]=a[0] break;
+          break;
+        }
+        continue;
+      }
+      if(o==47) Code(I_POPDIV,0) continue;
+      if(o==37) Code(I_POPMOD,0) continue;
+    }
+    break;
+  }
+  pop(p,o)
+}
+
+//Summands() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Summands(0)
+{
+  push(o)
+  Factors()
+  while(1)
+  {
+    SkipSpaces() o=q[j]Char
+    if(o==43)||(o==45)
+    {
+      j=j+1
+      Code(I_PUSH,0)
+      Factors()
+      if(o==43) Code(I_POPADD,0) continue;
+      if(o==45) Code(I_POPSUB,0) continue;
+    }
+    break;
+  }
+  pop(o)
+}
+
+//Equates() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Equates(0)
+{
+  push(o,p)
+  SkipSpaces() Find('!') if(a) j=j+1
+  push(a)
+  Summands()
+  while(1)
+  {
+    SkipSpaces() o=q[j]Integer p=o Char
+    while(o==0x3d3d)||(o==0x3d21)||(o==0x3d3c)||(o==0x3d3e)||(p==0x3c)||(p==0x3e)
+    {
+      if(o==0x3c3c)||(o==0x3e3e) break;
+      Code(I_PUSH,0)
+      if(o==0x3d3d) j=j+2 Summands()Code(I_POPEQ,0)Bool() continue 2; //Test auf Gleichheit                  
+      if(o==0x3d21) j=j+2 Summands()Code(I_POPNE,0)Bool() continue 2; //         Ungleichheit 
+      if(o==0x3d3c) j=j+2 Summands()Code(I_POPLE,0)Bool() continue 2; //         Kleiner gleich 
+      if(o==0x3d3e) j=j+2 Summands()Code(I_POPGE,0)Bool() continue 2; //         Gr”áer gleich 
+      if(p==0x3c)   j=j+1 Summands()Code(I_POPLL,0)Bool() continue 2; //         Kleiner
+      if(p==0x3e)   j=j+1 Summands()Code(I_POPGG,0)Bool() continue 2; //         Gr”áer
+    }
+    break;
+  }
+  pop(a) if(a) Code(I_NOT,0)
+  pop(p,o)
+}
+
+
+
+
+proc Asterisk(0)
+{
+  a=g[TempText]
+  getmem(b,a[0]+5) b[0]=a[0]+1
+  b[4]=bptr 42
+
+/*
+    push(a,w,x,y)
+    w=8362016 w=w[0] x=0
+    if(w!=0) x=x+1 w=w[0] if(x<100) repeat
+    y=a[0]
+    Put('%nCHECKPOINT AFTER GETMEM AND **<%da>,size %da    %n',@x) SaveFile()
+    pop(y,x,w,a)
+*/
+
+  copy(a+4,b+5,a[0])
+/*
+    push(a,w,x,y)
+    w=8362016 w=w[0] x=0
+    if(w!=0) x=x+1 w=w[0] if(x<100) repeat
+    y=a[0]
+    Put('%nCHECKPOINT AFTER COPY <%da>,size %da    %n',@x) SaveFile()
+    pop(y,x,w,a)
+*/
+
+}
+
+proc Pointer(0)
+{
+  a=g[Typedefs] a=a[0] a=a[0] a=a[0] g[LastType]=a
+}
+
+
+
+/*************************************************************
+
+  BEHANDELN VON VARIABLEN
+
+  Es hat sich als schwierig rausgestellt, zwischen den
+  Datentypen korrekt zu unterscheiden, wenn Zeiger darunter
+  vorkommen...
+
+
+  1. Als erstes werden die Sternchen gez„hlt.
+
+  2. Dann wird der bloáe Variablenname identifiziert
+     und der Datentyp bernommen.
+
+  3. Alle Member werden evaluiert und der Datentyp auf
+     dem Laufenden gehalten.
+
+
+                      *****************
+                     *                 *
+                    *                   *
+                   *                     *
+                  *                       *
+                 *                         *
+                *                           *
+               *                             *
+              *                               *
+             *                                 *
+            *                                   *
+           *                                     *
+          *                                       *
+         *                                         *
+        *                                           *
+       *                                             *
+      *                                               *
+     *                                                 *
+    *                                                   *
+   *                                                     *
+  *********************************************************
+
+                  VARIABLE (KEINE ELEMENTE)
+
+  *********************************************************
+
+   Der Datentyp einer Variablen ist immer klar. Pointer
+   werden vom Assembler behandelt und am Sternchen erkannt.
+
+   Ist die Variable als Zeiger deklariert worden und wird
+   sie ohne ein Sternchen angesprochen, muá der Datentyp
+   fr Pointer gew„hlt werden, damit immer 4 Bytes berechnet
+   werden.
+
+  *********************************************************
+         *                                         *
+        *                                           *
+       *                                             *
+      *                                               *
+     *                                                 *
+    *                                                   *
+   *                                                     *
+  *********************************************************
+
+              STRUKTURVARIABLE (KEINE ELEMENTE)
+
+  *********************************************************
+
+   Ohne Elemente hat die Struktur lediglich den Offset, der
+   wie ein Zeiger berechnet werden kann. Die Variable sollte
+   dafr als Zeiger deklariert worden sein, um sicherzustellen,
+   daá wirklich 4 Byte zur Berechnung zur Verfgung stehen.
+
+  *********************************************************
+         *                                         *
+        *                                           *
+       *                                             *
+      *                                               *
+     *                                                 *
+    *                                                   *
+   *                                                     *
+  *********************************************************
+
+             STRUKTURVARIABLE MIT ELEMENTAUSWAHL
+
+  *********************************************************
+
+   Hier bestimmt das letzte Element in der Kette den
+   Datentyp. Zeiger werden vom Assembler behandelt und
+   am Sternchen erkannt.
+
+  *********************************************************
+
+
+
+  4. Ist es eine Struktur ohne Memberangaben ohne Sternchen,
+     wird der Variablenname als Zeiger behandelt, d.h.
+     es wird DWORD benutzt, damit der Zeiger seine 4 Bytes
+     bekommt.
+
+  - Struktur ohne Member mit Sternchen, Datentyp bleibt gleich
+    und das Sternchen wird mit in die Ausgabe geschrieben.
+
+
+  -. Der Typ des letzten Members wird beibehalten, wenn es
+     eine Struktur ist und Member angegeben wurden. Eine
+     Struktur auf dem Heap br„uchte als L-Value den Datentyp
+     des Strukturelements und selbst ein Zeiger br„uchte in
+     der Zuweisung den korrekten Datentyp auch wenn ber einen
+     Zeiger auf den Bestimmungsort ausgewichen wird.
+
+  - 
+
+
+  Der Typenstack und die letzte Typvariable...
+
+
+  Eine Zuweisung beginnt damit daá der L-Value erkannt wird
+  und sein Datentyp wird auf den Stack gelegt, weil er zum
+  Schluá gecodet wird und ein anderes Atom dazwischenliegt,
+  das R-Value.
+
+  Im Falle eine Klammer vertieft sich das Ganze nochmal.
+
+  
+
+
+ ************************************************************/
+
+//Assignment, Zuweisungen haben die niedrigste Priorit„t, damit alles andere ohne Klammern zuerst berechnet wird.
+proc Assignment(0)
+{
+  push(b,c,x,y,z) while(1)
+  {
+    //'!', '(', '+', '-' k”nnen keine Zuweisungen sein, also nur den AKKU fllen
+    a=q[j]Char
+    if(a==33)||(a==40)||(a==43)||(a==45) Equates() break;
+    push(j) 
+
+
+    //'*' BEACHTEN ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+    y=0 if(q[j]Char==42) j=j+1 y=1
+
+    //Zielvariable finden
+    Scan() find(g[Variables],g[TmpText],@x) if(x)
+    {
+      g[LastType]=x[VarType] MCollect()
+
+  
+      //Datentyp bei Zeigern ohne Sternchen DWORD
+      while(1)
+      {
+        //Strukturen mit und ohne Member
+        a=g[LastType] if(a[TypID]==TypStrukt)&&(g[MemberCount]==0)
+        {
+//          if(y) g[LastType]=TypVoid break;
+//          else  Pointer()           break;
+          Pointer() break;
+
+        }
+        //Zeigervariablen ohne Sternchen werden als DWORD behandelt
+        if(x[VarDeRefCnt])&&(y==0) Pointer() break;
+        break;
+      }
+
+      //Datentyp auf dem Stack parken
+      TPush()
+
+      //Variablennamen auf dem Stack parken (Bei Zeigern muss der Variablenname noch mit '*' erzeugt werden.)
+      if(y==0) strcpy(g[TempText],@b)
+      else     Asterisk()
+/*
+    push(a,w,x)
+    w=8362016 w=w[0] x=0
+    if(w!=0) x=x+1 w=w[0] if(x<100) repeat
+    Put('%nCHECKPOINT BETA <%da>    %n',@x) SaveFile()
+    pop(x,w,a)
+*/
+
+      push(b)
+
+      //Eventuelle Zuweisungskette R-Value klarmachen (-> AKKU)
+      c=q[j]Integer while(1)
+      {
+        if(c Char==61)&&(c!=0x3d3d) j=j+1 push(I_STORE) break; //'='  ?
+        if(c==0x3d2b) j=j+2 push(I_STOREADD) break; //'+=' ?
+        if(c==0x3d2d) j=j+2 push(I_STORESUB) break; //'-=' ?
+        if(c==0x3d2a) j=j+2 push(I_STOREMUL) break; //'*=' ?
+        if(c==0x3d2f) j=j+2 push(I_STOREDIV) break; //'/=' ?
+        if(c==0x3d26) j=j+2 push(I_STOREAND) break; //'&=' ?
+        if(c==0x3d7c) j=j+2 push(I_STOREOR)  break; //'|=' ?
+        if(c==0x3d24) j=j+2 push(I_STOREXOR) break; //'$=' ?
+        if(c==0x3d25) j=j+2 push(I_STOREMOD) break; //'%=' ?
+
+        //Alles, was kein L-Value hat, besteht aus "Logischen Vergleichen oder Atomen"
+        pop(b,j)
+        TPop()
+        Equates()
+        break 2;
+      }
+
+      //Hier die "kombinierte Zuweisung" coden
+      Equates()
+
+      pop(a,y) z=y
+      Code(a,@y) free(y) pop(a)
+
+      break;
+    }
+    //Konstanten landen hier, als Returnwert oder Funktionsparameter (bei Null->xor Akku,Akku)
+    pop(j) Equates() break;
+  }
+  pop(z,y,x,c,b)
+}
+
+//Expression() ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+proc Expression(0)
+{
+  push(b) b=g[Thesis]
+  g[StatECount]=g[StatECount]+1
+  Assignment()
+  if(g[Thesis]!=b) Bail(26)
+  pop(b)
+}
+
+//LIBRARY-INTERFACE ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¯
+  a=Program a[508]=MT_Cold wait(0)
+
+//Ende SCANNERS.DLL
